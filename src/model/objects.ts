@@ -218,3 +218,14 @@ export function resizeObject(o: PlacedObject, patch: Partial<PlacedObject>): Pla
 export function scaleObjects(objects: PlacedObject[], factor: number): PlacedObject[] {
   return objects.map((o) => ({ ...o, position: { x: o.position.x * factor, z: o.position.z * factor } }))
 }
+
+/** A copy of the piece, half a metre away so it doesn't hide the original. */
+export function duplicateObject(o: PlacedObject): PlacedObject {
+  return {
+    ...o,
+    id: crypto.randomUUID(),
+    position: { x: o.position.x + 0.5, z: o.position.z + 0.5 },
+    size: { ...o.size },
+    material: { ...o.material },
+  }
+}
