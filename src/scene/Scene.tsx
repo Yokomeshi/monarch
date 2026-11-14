@@ -12,9 +12,10 @@ import { Walls } from './Walls'
 export function Scene() {
   const plan = useStore((s) => s.plan)
   const tool = useStore((s) => s.tool)
+  const selectWall = useStore((s) => s.selectWall)
 
   return (
-    <Canvas shadows="percentage">
+    <Canvas shadows="percentage" onPointerMissed={() => selectWall(null)}>
       <CameraRig />
       <color attach="background" args={['#1b1d21']} />
       <ambientLight intensity={0.6} />

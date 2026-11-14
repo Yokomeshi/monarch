@@ -196,3 +196,33 @@ kbd {
 .keys li {
   margin-bottom: 4px;
 }
+
+.length-control {
+  margin-bottom: 10px;
+}
+
+.length-control label {
+  color: var(--muted);
+}
+
+.length-control .row {
+  align-items: center;
+}
+
+.length-control input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.length-control input:not([type='range']) {
+  width: 96px;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+input.invalid {
+  border-color: var(--error);
+}

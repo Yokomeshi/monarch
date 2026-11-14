@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useStore } from '../store'
 import { formatLength, parseLength } from '../units'
 import { wallLength } from '../model/walls'
+import { WallPanel } from './WallPanel'
 
 export function Sidebar() {
   const units = useStore((s) => s.units)
@@ -73,6 +74,7 @@ export function Sidebar() {
 
       {plan && <CalibrationPanel />}
       <WallsPanel />
+      <WallPanel />
     </aside>
   )
 }

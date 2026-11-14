@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { Units } from './units'
 import { metresPerPixel, type Px } from './plan/geometry'
-import { scaleWalls, wallsFromChain, type Vec2, type Wall } from './model/walls'
+import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall } from './model/walls'
+
+export type WallProps = Pick<Wall, 'height' | 'thickness'>
 
 export interface Plan {
   url: string
@@ -30,6 +32,9 @@ interface State {
   /** The span the current scale was set from, kept on screen as a check. */
   calibrationLine: [Px, Px] | null
   walls: Wall[]
+  /** Height and thickness given to newly drawn walls. */
+  wallDefaults: WallProps
+  selectedWallId: string | null
   /** Corners of the wall chain being drawn, in world metres. */
   draft: Vec2[]
 
@@ -45,6 +50,11 @@ interface State {
   /** Turn the draft into walls. `close` adds a segment back to the first corner. */
   finishDraft: (close?: boolean) => void
   clearWalls: () => void
+  selectWall: (id: string | null) => void
+  updateWall: (id: string, props: Partial<WallProps>) => void
+  deleteWall: (id: string) => void
+  setWallDefaults: (props: Partial<WallProps>) => void
+  applyDefaultsToAll: () => void
 }
 
 export const useStore = create<State>()((set, get) => ({
@@ -56,6 +66,8 @@ export const useStore = create<State>()((set, get) => ({
   calibrationPoints: [],
   calibrationLine: null,
   walls: [],
+  wallDefaults: { ...WALL_DEFAULTS },
+  selectedWallId: null,
   draft: [],
 
   setUnits: (units) => set({ units }),
@@ -65,7 +77,7 @@ export const useStore = create<State>()((set, get) => ({
   setTool: (tool) => {
     // Leaving the wall tool keeps what was drawn so far.
     if (get().tool === 'wall') get().finishDraft()
-    set({ tool, calibrationPoints: [] })
+    set({ tool, calibrationPoints: [], selectedWallId: tool === 'none' ? get().selectedWallId : null })
   },
 
   loadPlan: async (file) => {
@@ -124,8 +136,24 @@ export const useStore = create<State>()((set, get) => ({
   finishDraft: (close = false) => {
     const { draft } = get()
     const chain = close && draft.length > 2 ? [...draft, draft[0]] : draft
-    set((s) => ({ walls: [...s.walls, ...wallsFromChain(chain)], draft: [] }))
+    set((s) => ({ walls: [...s.walls, ...wallsFromChain(chain, s.wallDefaults)], draft: [] }))
   },
 
-  clearWalls: () => set({ walls: [], draft: [] }),
+  clearWalls: () => set({ walls: [], draft: [], selectedWallId: null }),
+
+  selectWall: (selectedWallId) => set({ selectedWallId }),
+
+  updateWall: (id, props) =>
+    set((s) => ({ walls: s.walls.map((w) => (w.id === id ? { ...w, ...props } : w)) })),
+
+  deleteWall: (id) =>
+    set((s) => ({
+      walls: s.walls.filter((w) => w.id !== id),
+      selectedWallId: s.selectedWallId === id ? null : s.selectedWallId,
+    })),
+
+  setWallDefaults: (props) => set((s) => ({ wallDefaults: { ...s.wallDefaults, ...props } })),
+
+  applyDefaultsToAll: () =>
+    set((s) => ({ walls: s.walls.map((w) => ({ ...w, ...s.wallDefaults })) })),
 }))
