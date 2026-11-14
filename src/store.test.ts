@@ -22,6 +22,8 @@ beforeEach(() => {
     openings: [],
     objects: [],
     sun: { ...DEFAULT_SUN },
+    lights: [],
+    selectedLightId: null,
     models: {},
     placingModelId: null,
     selectedObjectId: null,
@@ -369,6 +371,54 @@ describe('imported models', () => {
     store().loadProject(saved)
     expect(store().objects).toEqual(objects)
     expect(store().models[objects[0].modelId!]).toMatchObject({ name: 'crate.obj', format: 'obj' })
+  })
+})
+
+describe('ceiling lights', () => {
+  const place = (x: number, z: number) => {
+    store().setTool('light')
+    store().placeLight(p(x, z))
+    return store().lights.at(-1)!
+  }
+
+  it('the light tool places a light, selects it and ends the tool', () => {
+    const light = place(1, 2)
+    expect(light).toMatchObject({ position: p(1, 2), lumens: 800, kelvin: 3000 })
+    expect(store().selectedLightId).toBe(light.id)
+    expect(store().tool).toBe('none')
+  })
+
+  it('does nothing without the light tool', () => {
+    store().placeLight(p(1, 2))
+    expect(store().lights).toEqual([])
+  })
+
+  it('selecting a light deselects everything else, and the reverse', () => {
+    const [wall] = drawL()
+    const light = place(1, 2)
+    store().selectWall(wall.id)
+    expect(store().selectedLightId).toBeNull()
+    store().selectLight(light.id)
+    expect(store().selectedWallId).toBeNull()
+  })
+
+  it('updates and deletes a light', () => {
+    const light = place(1, 2)
+    store().updateLight(light.id, { lumens: 1500, kelvin: 5000 })
+    expect(store().lights[0]).toMatchObject({ lumens: 1500, kelvin: 5000, position: p(1, 2) })
+    store().deleteLight(light.id)
+    expect(store().lights).toEqual([])
+    expect(store().selectedLightId).toBeNull()
+  })
+
+  it('is saved and loaded with the project', async () => {
+    const light = place(1, 2)
+    store().updateLight(light.id, { kelvin: 6000 })
+    const text = await store().saveProject()
+    store().deleteLight(light.id)
+    store().loadProject(text)
+    expect(store().lights).toEqual([{ ...light, kelvin: 6000 }])
+    expect(store().selectedLightId).toBeNull()
   })
 })
 

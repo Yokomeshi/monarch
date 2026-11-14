@@ -55,7 +55,7 @@ interface SliderProps {
   onChange: (value: number) => void
 }
 
-function Slider({ label, min, max, step, value, text, onChange }: SliderProps) {
+export function Slider({ label, min, max, step, value, text, onChange }: SliderProps) {
   const id = useId()
   return (
     <div className="field-row sun-row">

@@ -7,6 +7,8 @@ export interface Room {
   id: string
   /** The room's floor outline along the inside faces of its walls. */
   outline: Vec2[]
+  /** The same loop along the centre-lines of its walls. */
+  centreline: Vec2[]
   /** The walls around the room, in order. */
   wallIds: string[]
   /** Floor area in square metres, measured to the inside faces. */
@@ -57,6 +59,7 @@ export function detectRooms(walls: Wall[]): Room[] {
       rooms.push({
         id: [...new Set(wallIds)].sort().join('|'),
         outline,
+        centreline: corners,
         wallIds: [...new Set(wallIds)],
         area: Math.abs(signedArea(outline)),
         centre: centroid(outline),

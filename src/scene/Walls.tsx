@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { BufferGeometry, Float32BufferAttribute } from 'three'
+import { BufferGeometry, DoubleSide, Float32BufferAttribute } from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Edges } from '@react-three/drei'
 import { useStore } from '../store'
@@ -93,7 +93,8 @@ function WallMesh({ wall, footprint, openings, cut, selected, onPick }: WallMesh
 
   return (
     <mesh geometry={geometry} castShadow receiveShadow onClick={onClick}>
-      <Surface material={wall.material} />
+      {/* Both faces cast shadows: with the far face alone, sunlight leaks in along the room's corners. */}
+      <Surface material={wall.material} shadowSide={DoubleSide} />
       {/* The selection outline leaves the surface colour untouched, so materials can be judged. */}
       {selected && <Edges color="#36c5f0" lineWidth={3} threshold={15} />}
     </mesh>

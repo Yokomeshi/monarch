@@ -12,6 +12,7 @@ import { RoomLabels } from './RoomLabels'
 import { Rooms } from './Rooms'
 import { Openings } from './Openings'
 import { Objects } from './Objects'
+import { Lights } from './Lights'
 
 // World units are metres; Y is up. The ground plane is y = 0.
 export function Scene() {
@@ -45,6 +46,7 @@ export function Scene() {
       <Walls />
       <Openings />
       <Objects />
+      <Lights />
       <RoomLabels />
       {tool === 'wall' && <WallTool />}
     </Canvas>

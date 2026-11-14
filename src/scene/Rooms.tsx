@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { BufferGeometry, DoubleSide, Float32BufferAttribute, type Side } from 'three'
+import { BufferGeometry, Float32BufferAttribute } from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Edges } from '@react-three/drei'
 import { useStore } from '../store'
@@ -11,6 +11,7 @@ import { Surface } from './Surface'
 
 const MAX_CLICK_DRAG_PX = 4
 const FLOOR_Y = 0.004 // just above the plan image
+const CEILING_GAP = 0.02 // between a ceiling's top and its underside
 
 /** A floor and a ceiling for every room. */
 export function Rooms() {
@@ -38,11 +39,16 @@ export function Rooms() {
         return (
           <group key={room.id}>
             {showFloors && (
-              <Slab outline={room.outline} y={FLOOR_Y} facing="up" material={materials.floor} selected={selected} onSelect={onSelect} />
+              <Slab outline={room.outline} y={FLOOR_Y} facing="up" walkable material={materials.floor} selected={selected} onSelect={onSelect} />
             )}
             {showCeilings && (
-              // Double-sided, so it also shows from above.
-              <Slab outline={room.outline} y={ceilingY} facing="down" material={materials.ceiling} side={DoubleSide} selected={selected} onSelect={onSelect} />
+              // Two faces, so it also shows from above, with the sun block between them:
+              // the top is sunlit, the underside is not.
+              <>
+                <Slab outline={room.outline} y={ceilingY} facing="up" material={materials.ceiling} selected={selected} onSelect={onSelect} />
+                <SunBlock outline={room.centreline} y={ceilingY - CEILING_GAP / 2} />
+                <Slab outline={room.outline} y={ceilingY - CEILING_GAP} facing="down" material={materials.ceiling} selected={selected} onSelect={onSelect} />
+              </>
             )}
           </group>
         )
@@ -51,17 +57,37 @@ export function Rooms() {
   )
 }
 
+/**
+ * Keeps the sun out of a room with a ceiling, so daylight enters through the windows.
+ * Invisible, and it reaches into the walls: a shadow cast by the ceiling itself would
+ * streak the ceiling and leak light along the tops of the walls.
+ */
+function SunBlock({ outline, y }: { outline: Vec2[]; y: number }) {
+  const geometry = useMemo(() => {
+    const g = new BufferGeometry()
+    g.setAttribute('position', new Float32BufferAttribute(slabData(outline, y, 'down').positions, 3))
+    return g
+  }, [outline, y])
+  return (
+    // Facing down, so only light from above is blocked: ceiling lights below shine past it.
+    <mesh geometry={geometry} castShadow raycast={() => null}>
+      <meshBasicMaterial colorWrite={false} depthWrite={false} />
+    </mesh>
+  )
+}
+
 interface SlabProps {
   outline: Vec2[]
   y: number
   facing: 'up' | 'down'
+  /** A floor: somewhere a click can send the walker. */
+  walkable?: boolean
   material: Material
-  side?: Side
   selected: boolean
   onSelect?: () => void
 }
 
-function Slab({ outline, y, facing, material, side, selected, onSelect }: SlabProps) {
+function Slab({ outline, y, facing, walkable, material, selected, onSelect }: SlabProps) {
   const geometry = useMemo(() => {
     const { positions, uvs } = slabData(outline, y, facing)
     const g = new BufferGeometry()
@@ -79,8 +105,8 @@ function Slab({ outline, y, facing, material, side, selected, onSelect }: SlabPr
     : undefined
 
   return (
-    <mesh geometry={geometry} receiveShadow onClick={onClick} userData={{ walkable: facing === 'up' }}>
-      <Surface material={material} side={side} />
+    <mesh geometry={geometry} receiveShadow onClick={onClick} userData={{ walkable }}>
+      <Surface material={material} />
       {selected && <Edges color="#36c5f0" lineWidth={3} threshold={15} />}
     </mesh>
   )

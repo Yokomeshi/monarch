@@ -38,6 +38,7 @@ function sample(): ProjectFile {
     ],
     models: { m1: { name: 'lamp.glb', format: 'glb', naturalSize: { width: 1, depth: 2, height: 3 }, data: MODEL } },
     sun: { enabled: true, latitude: 51.5, day: 172, hour: 14.5, north: 30 },
+    lights: [{ id: 'l1', position: p(2, 1), lumens: 1200, kelvin: 4000 }],
     wallDefaults: WALL_DEFAULTS,
     rooms: {
       defaults: ROOM_DEFAULTS,
@@ -122,6 +123,23 @@ describe('parseProject', () => {
     ['an hour outside the day', (d: any) => (d.sun.hour = -1)],
     ['a non-numeric north', (d: any) => (d.sun.north = 'up')],
     ['a sun switch that is not on or off', (d: any) => (d.sun.enabled = 'yes')],
+  ])('rejects %s', (_name, edit) => {
+    expect(parse(edit)).toThrow(/damaged/)
+  })
+
+  it('opens a version 7 file, which has no lights', () => {
+    const project = parse((d) => {
+      d.version = 7
+      delete d.lights
+    })()
+    expect(project.lights).toEqual([])
+  })
+
+  it.each([
+    ['a light with no position', (d: any) => delete d.lights[0].position],
+    ['a light with no brightness', (d: any) => (d.lights[0].lumens = 0)],
+    ['a light with a non-numeric colour temperature', (d: any) => (d.lights[0].kelvin = 'warm')],
+    ['two lights with the same id', (d: any) => d.lights.push(d.lights[0])],
   ])('rejects %s', (_name, edit) => {
     expect(parse(edit)).toThrow(/damaged/)
   })

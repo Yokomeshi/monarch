@@ -12,6 +12,7 @@ import {
 } from './model/objects'
 import { inspectModelFile } from './model3d'
 import { DEFAULT_SUN, type SunSettings } from './model/sun'
+import { createLight, scaleLights, type CeilingLight } from './model/lights'
 
 export interface Texture {
   url: string
@@ -27,10 +28,10 @@ export interface Plan {
   calibrated: boolean
 }
 
-export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object' | 'walk'
+export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object' | 'light' | 'walk'
 
 /** Nothing selected. Spread before setting one selection, so the kinds replace each other. */
-const NO_SELECTION = { selectedWallId: null, selectedRoomId: null, selectedOpeningId: null, selectedObjectId: null }
+const NO_SELECTION = { selectedWallId: null, selectedRoomId: null, selectedOpeningId: null, selectedObjectId: null, selectedLightId: null }
 export type ViewMode = '3d' | 'top'
 
 // Before calibration the plan is shown 20 m wide so it fits the default view.
@@ -72,6 +73,9 @@ interface State {
   roomMaterials: Record<string, RoomMaterials>
   /** The sun study: where and when the sun is, for light and shadows. */
   sun: SunSettings
+  /** Ceiling lights. */
+  lights: CeilingLight[]
+  selectedLightId: string | null
   showFloors: boolean
   showCeilings: boolean
   /** Draw walls cut off low, so the rooms can be seen into. Display only. */
@@ -125,6 +129,11 @@ interface State {
   /** Give every room this room's floor and ceiling. */
   applyRoomToAll: (id: string) => void
   setSun: (patch: Partial<SunSettings>) => void
+  /** With the light tool: place a ceiling light, select it and end the tool. */
+  placeLight: (position: Vec2) => void
+  selectLight: (id: string | null) => void
+  updateLight: (id: string, patch: Partial<CeilingLight>) => void
+  deleteLight: (id: string) => void
   setShowFloors: (show: boolean) => void
   setShowCeilings: (show: boolean) => void
   setCutaway: (on: boolean) => void
@@ -174,6 +183,8 @@ export const useStore = create<State>()((set, get) => ({
   roomDefaults: { ...ROOM_DEFAULTS },
   roomMaterials: {},
   sun: { ...DEFAULT_SUN },
+  lights: [],
+  selectedLightId: null,
   showFloors: true,
   showCeilings: false,
   cutaway: false,
@@ -236,6 +247,7 @@ export const useStore = create<State>()((set, get) => ({
       walls: scaleWalls(walls, newScale / plan.metresPerPx),
       openings: scaleOpenings(s.openings, newScale / plan.metresPerPx),
       objects: scaleObjects(s.objects, newScale / plan.metresPerPx),
+      lights: scaleLights(s.lights, newScale / plan.metresPerPx),
       tool: 'none',
       calibrationPoints: [],
       calibrationLine: [a, b],
@@ -347,6 +359,22 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({ roomDefaults: s.roomMaterials[id] ?? s.roomDefaults, roomMaterials: {} })),
 
   setSun: (patch) => set((s) => ({ sun: { ...s.sun, ...patch } })),
+
+  placeLight: (position) => {
+    if (get().tool !== 'light') return
+    const light = createLight(position)
+    set((s) => ({ lights: [...s.lights, light], tool: 'none', ...NO_SELECTION, selectedLightId: light.id }))
+  },
+
+  selectLight: (selectedLightId) => set({ ...NO_SELECTION, selectedLightId }),
+
+  updateLight: (id, patch) => set((s) => ({ lights: s.lights.map((l) => (l.id === id ? { ...l, ...patch } : l)) })),
+
+  deleteLight: (id) =>
+    set((s) => ({
+      lights: s.lights.filter((l) => l.id !== id),
+      selectedLightId: s.selectedLightId === id ? null : s.selectedLightId,
+    })),
   setShowFloors: (showFloors) => set({ showFloors }),
   setShowCeilings: (showCeilings) => set({ showCeilings }),
   setCutaway: (cutaway) => set({ cutaway }),
@@ -385,7 +413,7 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   saveProject: async () => {
-    const { units, plan, calibrationLine, walls, openings, objects, sun, wallDefaults, textures, roomDefaults, roomMaterials } =
+    const { units, plan, calibrationLine, walls, openings, objects, sun, lights, wallDefaults, textures, roomDefaults, roomMaterials } =
       get()
     const rooms = { defaults: roomDefaults, materials: roomMaterials }
     const file: ProjectFile = {
@@ -406,6 +434,7 @@ export const useStore = create<State>()((set, get) => ({
       objects,
       models: {},
       sun,
+      lights,
       wallDefaults,
       rooms,
       textures: {},
@@ -447,6 +476,7 @@ export const useStore = create<State>()((set, get) => ({
       ),
       placingModelId: null,
       sun: file.sun,
+      lights: file.lights,
       wallDefaults: file.wallDefaults,
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,
