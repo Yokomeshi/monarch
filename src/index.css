@@ -335,3 +335,21 @@ section > button + .hint {
 .library + .hint {
   margin-top: 8px;
 }
+
+.library button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-size {
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.model-size input[type='checkbox'] {
+  width: auto;
+  margin: 0 6px 0 0;
+  accent-color: var(--accent);
+}

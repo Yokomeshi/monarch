@@ -360,10 +360,16 @@ function OpeningsPanel() {
 function FurniturePanel() {
   const tool = useStore((s) => s.tool)
   const placingKind = useStore((s) => s.placingKind)
+  const placingModelId = useStore((s) => s.placingModelId)
+  const models = useStore((s) => s.models)
   const count = useStore((s) => s.objects.length)
   const startPlacingObject = useStore((s) => s.startPlacingObject)
+  const startPlacingModel = useStore((s) => s.startPlacingModel)
+  const importModel = useStore((s) => s.importModel)
   const setTool = useStore((s) => s.setTool)
+  const [error, setError] = useState<string | null>(null)
   const placing = tool === 'object'
+  const placingName = (placingModelId && models[placingModelId]?.name) || LIBRARY[placingKind].name.toLowerCase()
 
   useEffect(() => {
     if (!placing) return
@@ -372,22 +378,59 @@ function FurniturePanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [placing, setTool])
 
+  const onFile = async (file: File | undefined) => {
+    if (!file) return
+    setError(null)
+    try {
+      await importModel(file)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Couldn't read "${file.name}".`)
+    }
+  }
+
   return (
     <section>
       <h2>Furniture</h2>
       {placing ? (
         <>
-          <p className="hint">Click in the view to place the {LIBRARY[placingKind].name.toLowerCase()}. Esc cancels.</p>
+          <p className="hint">Click in the view to place the {placingName}. Esc cancels.</p>
           <button onClick={() => setTool('none')}>Cancel</button>
         </>
       ) : (
-        <div className="library">
-          {(Object.keys(LIBRARY) as ObjectKind[]).map((kind) => (
-            <button key={kind} onClick={() => startPlacingObject(kind)}>
-              {LIBRARY[kind].name}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="library">
+            {(Object.keys(LIBRARY) as ObjectKind[]).map((kind) => (
+              <button key={kind} onClick={() => startPlacingObject(kind)}>
+                {LIBRARY[kind].name}
+              </button>
+            ))}
+            {Object.entries(models).map(([id, model]) => (
+              <button key={id} title="Imported model" onClick={() => startPlacingModel(id)}>
+                {model.name}
+              </button>
+            ))}
+          </div>
+          <p>
+            <label className="button">
+              Import 3D model…
+              <input
+                type="file"
+                accept=".glb,.gltf,.obj"
+                hidden
+                data-testid="model-input"
+                onChange={(e) => {
+                  onFile(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </p>
+        </>
+      )}
+      {error && (
+        <p className="error" data-testid="model-error">
+          {error}
+        </p>
       )}
       {count > 0 && (
         <p className="hint" data-testid="furniture-summary">

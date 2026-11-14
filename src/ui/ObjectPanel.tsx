@@ -1,6 +1,6 @@
-import { useEffect, useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useStore } from '../store'
-import { LIBRARY, type PlacedObject, type Size3 } from '../model/objects'
+import { fitSize, LIBRARY, resizeProportional, type PlacedObject, type Size3 } from '../model/objects'
 import { LengthControl, type LengthRange } from './LengthControl'
 import { MaterialControls } from './MaterialControls'
 
@@ -29,9 +29,15 @@ export function ObjectPanel({ object }: { object: PlacedObject }) {
   const duplicateObject = useStore((s) => s.duplicateObject)
   const units = useStore((s) => s.units)
   const rotationId = useId()
-  const name = LIBRARY[object.kind].name.toLowerCase()
+  const model = useStore((s) => (object.modelId ? s.models[object.modelId] : undefined))
+  // An imported model distorts if one side is changed alone, so its sides start out linked.
+  const [keepProportions, setKeepProportions] = useState(true)
+  const name = object.kind === 'model' ? (model?.name ?? 'model') : LIBRARY[object.kind].name.toLowerCase()
   const set = (patch: Partial<PlacedObject>) => updateObject(object.id, patch)
-  const setSize = (patch: Partial<Size3>) => set({ size: { ...object.size, ...patch } })
+  const setSize = (dimension: keyof Size3, value: number) =>
+    set({
+      size: model && keepProportions ? resizeProportional(object.size, dimension, value) : { ...object.size, [dimension]: value },
+    })
 
   // Keyboard: Delete removes, Ctrl/Cmd+D duplicates, arrows nudge (Shift for a bigger step).
   useEffect(() => {
@@ -61,9 +67,18 @@ export function ObjectPanel({ object }: { object: PlacedObject }) {
         Drag the {name} to move it. Near a wall it snaps flush, back to the wall; hold <kbd>Alt</kbd> to place it
         freely. Arrow keys nudge it.
       </p>
-      <LengthControl label="Width" value={object.size.width} range={SIZE_RANGE} onChange={(width) => setSize({ width })} />
-      <LengthControl label="Depth" value={object.size.depth} range={SIZE_RANGE} onChange={(depth) => setSize({ depth })} />
-      <LengthControl label="Height" value={object.size.height} range={SIZE_RANGE} onChange={(height) => setSize({ height })} />
+      <LengthControl label="Width" value={object.size.width} range={SIZE_RANGE} onChange={(v) => setSize('width', v)} />
+      <LengthControl label="Depth" value={object.size.depth} range={SIZE_RANGE} onChange={(v) => setSize('depth', v)} />
+      <LengthControl label="Height" value={object.size.height} range={SIZE_RANGE} onChange={(v) => setSize('height', v)} />
+      {model && (
+        <div className="row model-size">
+          <label>
+            <input type="checkbox" checked={keepProportions} onChange={(e) => setKeepProportions(e.target.checked)} />
+            Keep proportions
+          </label>
+          <button onClick={() => set({ size: fitSize(model.naturalSize) })}>Reset size</button>
+        </div>
+      )}
       <div className="field-row">
         <label htmlFor={rotationId}>Rotation</label>
         <input
@@ -80,7 +95,11 @@ export function ObjectPanel({ object }: { object: PlacedObject }) {
       <p>
         <button onClick={() => set({ rotation: object.rotation + 90 })}>Rotate 90°</button>
       </p>
-      <MaterialControls material={object.material} onChange={(material) => set({ material })} />
+      {model && model.format !== 'obj' ? (
+        <p className="hint">This model uses the materials saved in its file.</p>
+      ) : (
+        <MaterialControls material={object.material} onChange={(material) => set({ material })} />
+      )}
       <div className="row">
         <button onClick={() => duplicateObject(object.id)}>Duplicate</button>
         <button onClick={() => deleteObject(object.id)}>Delete {name}</button>

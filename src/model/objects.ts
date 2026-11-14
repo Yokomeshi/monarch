@@ -16,7 +16,10 @@ export type ObjectKind = 'bed' | 'sofa' | 'table' | 'chair' | 'desk' | 'wardrobe
 
 export interface PlacedObject {
   id: string
-  kind: ObjectKind
+  /** A piece from the library, or 'model' for an imported 3D model file. */
+  kind: ObjectKind | 'model'
+  /** For kind 'model': which imported file to draw. */
+  modelId?: string
   /** Centre of the piece on the floor, in world metres. */
   position: Vec2
   /** Degrees counter-clockwise as seen in Top view, 0 to 360. */
@@ -198,7 +201,9 @@ export function createObject(kind: ObjectKind, position: Vec2): PlacedObject {
   }
 }
 
-export const objectParts = (o: Pick<PlacedObject, 'kind' | 'size'>): Part[] => LIBRARY[o.kind].parts(o.size)
+/** The blocks that make up a library piece. An imported model has none: its file is drawn instead. */
+export const objectParts = (o: Pick<PlacedObject, 'kind' | 'size'>): Part[] =>
+  o.kind === 'model' ? [] : LIBRARY[o.kind].parts(o.size)
 
 /** Each dimension of an object stays between these, in metres. */
 export const SIZE_LIMITS = { min: 0.1, max: 10 }
@@ -227,5 +232,52 @@ export function duplicateObject(o: PlacedObject): PlacedObject {
     position: { x: o.position.x + 0.5, z: o.position.z + 0.5 },
     size: { ...o.size },
     material: { ...o.material },
+  }
+}
+
+// ---- Imported 3D model files ----
+
+export type ModelFormat = 'glb' | 'gltf' | 'obj'
+
+/** An imported model file. `naturalSize` is its bounding box in the file's own units. */
+export interface ModelInfo {
+  name: string
+  format: ModelFormat
+  naturalSize: Size3
+}
+
+/** The format of a model file, from its extension, or null if it isn't one we read. */
+export function modelFormat(filename: string): ModelFormat | null {
+  const ext = /\.([a-z0-9]+)$/i.exec(filename)?.[1].toLowerCase()
+  return ext === 'glb' || ext === 'gltf' || ext === 'obj' ? ext : null
+}
+
+/**
+ * The size to give a newly imported model. glTF files are in metres, so a plausible
+ * size is kept. Anything absurd (say, modelled in millimetres) is scaled so its
+ * longest side is 1 m, keeping its proportions.
+ */
+export function fitSize(natural: Size3): Size3 {
+  const longest = Math.max(natural.width, natural.depth, natural.height)
+  if (longest >= 0.05 && longest <= 20) return { ...natural }
+  return { width: natural.width / longest, depth: natural.depth / longest, height: natural.height / longest }
+}
+
+/** Set one dimension and scale the other two by the same ratio. */
+export function resizeProportional(size: Size3, dimension: keyof Size3, value: number): Size3 {
+  const k = value / size[dimension]
+  return { width: size.width * k, depth: size.depth * k, height: size.height * k, [dimension]: value }
+}
+
+export function createModelObject(modelId: string, size: Size3, position: Vec2): PlacedObject {
+  return {
+    id: crypto.randomUUID(),
+    kind: 'model',
+    modelId,
+    position,
+    rotation: 0,
+    size: { ...size },
+    // Used by .obj models, which carry no materials of their own.
+    material: { color: '#c8c4bc', roughness: 0.8, metalness: 0, textureId: null, tileSize: 1 },
   }
 }
