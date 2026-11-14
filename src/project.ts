@@ -1,11 +1,12 @@
 // Project file format: one self-contained JSON document with images embedded as data URLs.
 
-import type { Material } from './model/materials'
+import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import type { Wall, WallProps } from './model/walls'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
-export const PROJECT_VERSION = 1
+// Version 2 added room floor and ceiling materials. Version 1 files still open.
+export const PROJECT_VERSION = 2
 
 export interface ProjectFile {
   app: 'monarch'
@@ -23,13 +24,24 @@ export interface ProjectFile {
   } | null
   walls: Wall[]
   wallDefaults: WallProps
+  rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
   textures: Record<string, { name: string; image: string }>
 }
 
+/** Floor and ceiling materials: the defaults, and the rooms that differ from them, by room id. */
+export interface RoomFinishes {
+  defaults: RoomMaterials
+  materials: Record<string, RoomMaterials>
+}
+
 /** Ids of the textures actually used, so unused uploads aren't saved. */
-export function usedTextureIds(walls: Wall[], wallDefaults: WallProps): string[] {
-  const ids = [...walls.map((w) => w.material.textureId), wallDefaults.material.textureId]
+export function usedTextureIds(walls: Wall[], wallDefaults: WallProps, rooms: RoomFinishes): string[] {
+  const ids = [
+    ...walls.map((w) => w.material.textureId),
+    wallDefaults.material.textureId,
+    ...[rooms.defaults, ...Object.values(rooms.materials)].flatMap((r) => [r.floor.textureId, r.ceiling.textureId]),
+  ]
   return [...new Set(ids.filter((id): id is string => id !== null))]
 }
 
@@ -64,7 +76,24 @@ export function parseProject(text: string): ProjectFile {
   if (!isObject(data.wallDefaults)) throw invalid('wall defaults')
   const wallDefaults = parseWallProps(data.wallDefaults, 'wall defaults', textures)
 
-  return { app: 'monarch', version: data.version, units, plan: parsePlan(data.plan), walls, wallDefaults, textures }
+  const rooms = parseRooms(data.rooms, textures)
+  return { app: 'monarch', version: data.version, units, plan: parsePlan(data.plan), walls, wallDefaults, rooms, textures }
+}
+
+function parseRooms(r: unknown, textures: ProjectFile['textures']): RoomFinishes {
+  if (r === undefined) return { defaults: ROOM_DEFAULTS, materials: {} } // version 1 file
+  if (!isObject(r) || !isObject(r.materials)) throw invalid('rooms')
+  const finishes = (v: unknown, label: string): RoomMaterials => {
+    if (!isObject(v)) throw invalid(label)
+    return {
+      floor: parseMaterial(v.floor, `${label} floor`, textures),
+      ceiling: parseMaterial(v.ceiling, `${label} ceiling`, textures),
+    }
+  }
+  return {
+    defaults: finishes(r.defaults, 'room defaults'),
+    materials: Object.fromEntries(Object.entries(r.materials).map(([id, v]) => [id, finishes(v, 'room')])),
+  }
 }
 
 function parsePlan(p: unknown): ProjectFile['plan'] {

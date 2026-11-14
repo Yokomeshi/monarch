@@ -51,3 +51,16 @@ export function matchingPreset(material: Material): Preset | undefined {
 function withoutName({ color, roughness, metalness }: Preset) {
   return { color, roughness, metalness }
 }
+
+/** Floor and ceiling finishes of one room. */
+export interface RoomMaterials {
+  floor: Material
+  ceiling: Material
+}
+
+const wood = PRESETS.find((p) => p.name === 'Wood')!
+
+export const ROOM_DEFAULTS: RoomMaterials = {
+  floor: applyPreset(DEFAULT_MATERIAL, wood),
+  ceiling: DEFAULT_MATERIAL,
+}

@@ -1,14 +1,14 @@
-import { useMemo } from 'react'
 import { Html } from '@react-three/drei'
 import { useStore } from '../store'
-import { detectRooms } from '../model/rooms'
+import { useRooms } from '../useRooms'
 import { formatArea } from '../units'
 
-/** A name and area label at the centre of each room. */
+/** A name and area label at the centre of each room, in Top view. In 3D they would float over the walls. */
 export function RoomLabels() {
-  const walls = useStore((s) => s.walls)
   const units = useStore((s) => s.units)
-  const rooms = useMemo(() => detectRooms(walls), [walls])
+  const rooms = useRooms()
+  const topView = useStore((s) => s.viewMode === 'top')
+  if (!topView) return null
 
   return (
     <>

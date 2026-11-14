@@ -12,10 +12,12 @@ const TILE_RANGE: LengthRange = {
 interface Props {
   material: Material
   onChange: (material: Material) => void
+  /** Names the surface when a panel has more than one, e.g. "Floor". */
+  title?: string
 }
 
 /** Preset, colour, PBR sliders and photo-texture picker for one material. */
-export function MaterialControls({ material, onChange }: Props) {
+export function MaterialControls({ material, onChange, title = 'Material' }: Props) {
   const texture = useStore((s) => (material.textureId ? s.textures[material.textureId] : undefined))
   const addTexture = useStore((s) => s.addTexture)
   const [error, setError] = useState<string | null>(null)
@@ -35,8 +37,8 @@ export function MaterialControls({ material, onChange }: Props) {
   }
 
   return (
-    <div className="material-controls">
-      <h3>Material</h3>
+    <div className="material-controls" data-testid={`material-${title.toLowerCase()}`}>
+      <h3>{title}</h3>
       <div className="swatches" role="radiogroup" aria-label="Material preset">
         {PRESETS.map((p) => (
           <button

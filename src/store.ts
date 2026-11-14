@@ -4,6 +4,7 @@ import { metresPerPixel, type Px } from './plan/geometry'
 import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type WallProps } from './model/walls'
 
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
+import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 
 export interface Texture {
   url: string
@@ -40,6 +41,13 @@ interface State {
   /** Height and thickness given to newly drawn walls. */
   wallDefaults: WallProps
   selectedWallId: string | null
+  selectedRoomId: string | null
+  /** Floor and ceiling materials for rooms without their own. */
+  roomDefaults: RoomMaterials
+  /** Rooms whose materials differ from the defaults, by room id. */
+  roomMaterials: Record<string, RoomMaterials>
+  showFloors: boolean
+  showCeilings: boolean
   /** Uploaded photo textures, by id. */
   textures: Record<string, Texture>
   /** Corners of the wall chain being drawn, in world metres. */
@@ -62,6 +70,12 @@ interface State {
   deleteWall: (id: string) => void
   setWallDefaults: (props: Partial<WallProps>) => void
   applyDefaultsToAll: () => void
+  selectRoom: (id: string | null) => void
+  setRoomMaterial: (id: string, part: keyof RoomMaterials, material: Material) => void
+  /** Give every room this room's floor and ceiling. */
+  applyRoomToAll: (id: string) => void
+  setShowFloors: (show: boolean) => void
+  setShowCeilings: (show: boolean) => void
   /** Load an image as a texture and return its id. */
   addTexture: (file: File) => Promise<string>
   /** The whole project as the text of a project file. */
@@ -97,6 +111,11 @@ export const useStore = create<State>()((set, get) => ({
   walls: [],
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
+  selectedRoomId: null,
+  roomDefaults: { ...ROOM_DEFAULTS },
+  roomMaterials: {},
+  showFloors: true,
+  showCeilings: false,
   textures: {},
   draft: [],
 
@@ -107,7 +126,13 @@ export const useStore = create<State>()((set, get) => ({
   setTool: (tool) => {
     // Leaving the wall tool keeps what was drawn so far.
     if (get().tool === 'wall') get().finishDraft()
-    set({ tool, calibrationPoints: [], selectedWallId: tool === 'none' ? get().selectedWallId : null })
+    const keep = tool === 'none'
+    set((s) => ({
+      tool,
+      calibrationPoints: [],
+      selectedWallId: keep ? s.selectedWallId : null,
+      selectedRoomId: keep ? s.selectedRoomId : null,
+    }))
   },
 
   loadPlan: async (file) => {
@@ -171,7 +196,20 @@ export const useStore = create<State>()((set, get) => ({
 
   clearWalls: () => set({ walls: [], draft: [], selectedWallId: null }),
 
-  selectWall: (selectedWallId) => set({ selectedWallId }),
+  selectWall: (selectedWallId) => set({ selectedWallId, selectedRoomId: null }),
+
+  selectRoom: (selectedRoomId) => set({ selectedRoomId, selectedWallId: null }),
+
+  setRoomMaterial: (id, part, material) =>
+    set((s) => ({
+      roomMaterials: { ...s.roomMaterials, [id]: { ...(s.roomMaterials[id] ?? s.roomDefaults), [part]: material } },
+    })),
+
+  applyRoomToAll: (id) =>
+    set((s) => ({ roomDefaults: s.roomMaterials[id] ?? s.roomDefaults, roomMaterials: {} })),
+
+  setShowFloors: (showFloors) => set({ showFloors }),
+  setShowCeilings: (showCeilings) => set({ showCeilings }),
 
   updateWall: (id, props) =>
     set((s) => ({ walls: s.walls.map((w) => (w.id === id ? { ...w, ...props } : w)) })),
@@ -203,7 +241,8 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   saveProject: async () => {
-    const { units, plan, calibrationLine, walls, wallDefaults, textures } = get()
+    const { units, plan, calibrationLine, walls, wallDefaults, textures, roomDefaults, roomMaterials } = get()
+    const rooms = { defaults: roomDefaults, materials: roomMaterials }
     const file: ProjectFile = {
       app: 'monarch',
       version: PROJECT_VERSION,
@@ -219,9 +258,10 @@ export const useStore = create<State>()((set, get) => ({
       },
       walls,
       wallDefaults,
+      rooms,
       textures: {},
     }
-    for (const id of usedTextureIds(walls, wallDefaults)) {
+    for (const id of usedTextureIds(walls, wallDefaults, rooms)) {
       const t = textures[id]
       if (t) file.textures[id] = { name: t.name, image: await toDataUrl(t.url) }
     }
@@ -247,6 +287,9 @@ export const useStore = create<State>()((set, get) => ({
       calibrationPoints: [],
       walls: file.walls,
       wallDefaults: file.wallDefaults,
+      roomDefaults: file.rooms.defaults,
+      roomMaterials: file.rooms.materials,
+      selectedRoomId: null,
       textures: Object.fromEntries(
         Object.entries(file.textures).map(([id, t]) => [id, { url: t.image, name: t.name }]),
       ),

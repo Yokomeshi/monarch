@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './store'
 import { wallFootprints } from './model/wallGeometry'
 import { WALL_DEFAULTS } from './model/walls'
-import { applyPreset, DEFAULT_MATERIAL, PRESETS } from './model/materials'
+import { applyPreset, DEFAULT_MATERIAL, PRESETS, ROOM_DEFAULTS } from './model/materials'
 
 const p = (x: number, z: number) => ({ x, z })
 const store = () => useStore.getState()
@@ -15,7 +15,16 @@ function drawL() {
 }
 
 beforeEach(() => {
-  useStore.setState({ walls: [], draft: [], selectedWallId: null, wallDefaults: { ...WALL_DEFAULTS }, tool: 'none' })
+  useStore.setState({
+    walls: [],
+    draft: [],
+    selectedWallId: null,
+    selectedRoomId: null,
+    wallDefaults: { ...WALL_DEFAULTS },
+    roomDefaults: { ...ROOM_DEFAULTS },
+    roomMaterials: {},
+    tool: 'none',
+  })
 })
 
 describe('wall editing', () => {
@@ -110,5 +119,41 @@ describe('save and load', () => {
     const walls = drawL()
     expect(() => store().loadProject('{"app":"other"}')).toThrow()
     expect(store().walls).toEqual(walls)
+  })
+})
+
+describe('rooms', () => {
+  const stone = applyPreset(DEFAULT_MATERIAL, PRESETS[5])
+
+  it("setting one room's floor leaves its ceiling and other rooms on the defaults", () => {
+    store().setRoomMaterial('room-a', 'floor', stone)
+    expect(store().roomMaterials['room-a'].floor).toEqual(stone)
+    expect(store().roomMaterials['room-a'].ceiling).toEqual(store().roomDefaults.ceiling)
+    expect(store().roomMaterials['room-b']).toBeUndefined()
+  })
+
+  it('applying a room to all rooms makes its materials the default', () => {
+    store().setRoomMaterial('room-a', 'floor', stone)
+    store().setRoomMaterial('room-b', 'ceiling', stone)
+    store().applyRoomToAll('room-a')
+    expect(store().roomDefaults.floor).toEqual(stone)
+    expect(store().roomMaterials).toEqual({})
+  })
+
+  it('selecting a room and selecting a wall replace each other', () => {
+    const [a] = drawL()
+    store().selectWall(a.id)
+    store().selectRoom('room-a')
+    expect(store().selectedWallId).toBeNull()
+    store().selectWall(a.id)
+    expect(store().selectedRoomId).toBeNull()
+  })
+
+  it('room materials survive save and load', async () => {
+    store().setRoomMaterial('room-a', 'floor', stone)
+    const saved = await store().saveProject()
+    store().applyRoomToAll('room-b') // resets everything to the defaults
+    store().loadProject(saved)
+    expect(store().roomMaterials['room-a'].floor).toEqual(stone)
   })
 })
