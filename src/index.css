@@ -300,3 +300,8 @@ input.invalid {
   line-height: 1.3;
   white-space: nowrap;
 }
+
+.view-toolbar > button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}

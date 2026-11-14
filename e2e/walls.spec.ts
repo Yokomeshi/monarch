@@ -137,19 +137,21 @@ test('Backspace while typing in a field edits the text, not the wall', async ({ 
   await expect(count(app)).toHaveText('4')
 })
 
-test('clicking the floor deselects, with and without a plan under it', async ({ app }) => {
+test('clicking a floor selects its room; clicking outside deselects, with or without a plan', async ({ app }) => {
   await drawRoom(app)
   let at = await topView(app)
   await click(app, at(3, 0))
   await expect(heading(app, 'Selected wall')).toBeVisible()
   await click(app, at(0, 0))
+  await expect(heading(app, 'Selected room')).toBeVisible()
+  await click(app, at(8, 8))
   await expect(heading(app, 'New walls')).toBeVisible()
 
-  await uploadPlan(app) // 20 m x 16 m, so it lies under the whole room
+  await uploadPlan(app) // 20 m x 16 m, so it lies under the room and around it
   at = await topView(app, planExtent(UNCALIBRATED))
   await click(app, at(3, 0))
   await expect(heading(app, 'Selected wall')).toBeVisible()
-  await click(app, at(0, 0))
+  await click(app, at(8, 7)) // on the plan, outside the room
   await expect(heading(app, 'New walls')).toBeVisible()
 })
 

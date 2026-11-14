@@ -1,7 +1,8 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useStore } from '../store'
 import { formatArea, formatLength, parseLength } from '../units'
-import { detectRooms } from '../model/rooms'
+import { useRooms } from '../useRooms'
+import { RoomPanel } from './RoomPanel'
 import { wallLength } from '../model/walls'
 import { WallPanel } from './WallPanel'
 
@@ -78,7 +79,7 @@ export function Sidebar() {
       {plan && <CalibrationPanel />}
       <WallsPanel />
       <RoomsPanel />
-      <WallPanel />
+      <Inspector />
     </aside>
   )
 }
@@ -266,9 +267,9 @@ function ProjectPanel() {
 
 function RoomsPanel() {
   const units = useStore((s) => s.units)
-  const walls = useStore((s) => s.walls)
-  const rooms = useMemo(() => detectRooms(walls), [walls])
-  if (walls.length === 0) return null
+  const hasWalls = useStore((s) => s.walls.length > 0)
+  const rooms = useRooms()
+  if (!hasWalls) return null
   const total = rooms.reduce((sum, r) => sum + r.area, 0)
 
   return (
@@ -294,4 +295,13 @@ function RoomsPanel() {
       )}
     </section>
   )
+}
+
+/** Edits the selected room, or else the selected wall or the new-wall defaults. */
+function Inspector() {
+  const rooms = useRooms()
+  const selectedRoomId = useStore((s) => s.selectedRoomId)
+  const i = rooms.findIndex((r) => r.id === selectedRoomId)
+  if (i < 0) return <WallPanel />
+  return <RoomPanel room={rooms[i]} name={`Room ${i + 1}`} hasOthers={rooms.length > 1} />
 }

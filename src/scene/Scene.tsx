@@ -8,6 +8,7 @@ import { CalibrationOverlay } from './CalibrationOverlay'
 import { WallTool } from './WallTool'
 import { Walls } from './Walls'
 import { RoomLabels } from './RoomLabels'
+import { Rooms } from './Rooms'
 
 // World units are metres; Y is up. The ground plane is y = 0.
 export function Scene() {
@@ -55,6 +56,7 @@ export function Scene() {
           <CalibrationOverlay plan={plan} />
         </Suspense>
       )}
+      <Rooms />
       <Walls />
       <RoomLabels />
       {tool === 'wall' && <WallTool />}

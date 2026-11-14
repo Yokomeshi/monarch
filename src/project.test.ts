@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
-import { DEFAULT_MATERIAL } from './model/materials'
+import { DEFAULT_MATERIAL, ROOM_DEFAULTS } from './model/materials'
 import { createWall, WALL_DEFAULTS } from './model/walls'
 
 const IMG = 'data:image/png;base64,AAAA'
@@ -26,6 +26,10 @@ function sample(): ProjectFile {
       createWall(p(4, 0), p(4, 3)),
     ],
     wallDefaults: WALL_DEFAULTS,
+    rooms: {
+      defaults: ROOM_DEFAULTS,
+      materials: { 'a|b': { floor: { ...DEFAULT_MATERIAL, color: '#112233' }, ceiling: DEFAULT_MATERIAL } },
+    },
     textures: { tex1: { name: 'tile.png', image: IMG } },
   }
 }
@@ -43,7 +47,7 @@ describe('parseProject', () => {
   })
 
   it('accepts a project with no plan, walls or textures', () => {
-    const empty = { ...sample(), plan: null, walls: [], textures: {} }
+    const empty = { ...sample(), plan: null, walls: [], textures: {}, rooms: { defaults: ROOM_DEFAULTS, materials: {} } }
     expect(parseProject(JSON.stringify(empty))).toEqual(empty)
   })
 
@@ -73,6 +77,20 @@ describe('parseProject', () => {
     expect(parse(edit)).toThrow(/damaged/)
   })
 
+  it('opens a version 1 file, which has no room materials, with the defaults', () => {
+    const project = parse((d) => {
+      d.version = 1
+      delete d.rooms
+    })()
+    expect(project.rooms).toEqual({ defaults: ROOM_DEFAULTS, materials: {} })
+    expect(project.walls).toHaveLength(2)
+  })
+
+  it('rejects a damaged room material', () => {
+    expect(parse((d) => (d.rooms.materials['a|b'].floor.color = 'red'))).toThrow(/damaged/)
+    expect(parse((d) => delete d.rooms.defaults.ceiling)).toThrow(/damaged/)
+  })
+
   it('falls back to the plain colour when a texture is missing from the file', () => {
     const project = parse((d) => (d.textures = {}))()
     expect(project.walls[0].material.textureId).toBeNull()
@@ -84,7 +102,13 @@ describe('usedTextureIds', () => {
   it('lists each referenced texture once, including the defaults', () => {
     const { walls } = sample()
     const defaults = { ...WALL_DEFAULTS, material: { ...DEFAULT_MATERIAL, textureId: 'tex2' } }
-    expect(usedTextureIds([...walls, walls[0]], defaults).sort()).toEqual(['tex1', 'tex2'])
-    expect(usedTextureIds([walls[1]], WALL_DEFAULTS)).toEqual([])
+    const noRooms = { defaults: ROOM_DEFAULTS, materials: {} }
+    expect(usedTextureIds([...walls, walls[0]], defaults, noRooms).sort()).toEqual(['tex1', 'tex2'])
+    expect(usedTextureIds([walls[1]], WALL_DEFAULTS, noRooms)).toEqual([])
+    const rooms = {
+      defaults: ROOM_DEFAULTS,
+      materials: { r: { floor: { ...DEFAULT_MATERIAL, textureId: 'tex3' }, ceiling: DEFAULT_MATERIAL } },
+    }
+    expect(usedTextureIds([], WALL_DEFAULTS, rooms)).toEqual(['tex3'])
   })
 })
