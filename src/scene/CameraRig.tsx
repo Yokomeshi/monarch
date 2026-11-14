@@ -4,13 +4,15 @@ import { OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-thr
 import { Vector3, type OrthographicCamera as OrthoCam, type PerspectiveCamera as PerspCam } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useStore } from '../store'
+import { WalkRig } from './WalkRig'
 
 const FIT_MARGIN = 0.9
 const DEFAULT_EXTENT_M = 20
 
-/** Perspective orbit camera in 3D; straight-down orthographic camera in Top. */
+/** Perspective orbit camera in 3D; straight-down orthographic camera in Top; first-person camera while walking. */
 export function CameraRig() {
   const viewMode = useStore((s) => s.viewMode)
+  const walking = useStore((s) => s.tool === 'walk')
   const frameRequest = useStore((s) => s.frameRequest)
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null
@@ -23,6 +25,7 @@ export function CameraRig() {
     frame(camera as OrthoCam | PerspCam, controls, width, depth)
   }, [frameRequest, camera, controls])
 
+  if (walking) return <WalkRig />
   return viewMode === 'top' ? (
     <>
       <OrthographicCamera makeDefault position={[0, 100, 0]} up={[0, 0, -1]} near={0.1} far={1000} />

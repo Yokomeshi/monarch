@@ -49,7 +49,7 @@ function ObjectModel({ object, selected, interactive }: { object: PlacedObject; 
   const selectObject = useStore((s) => s.selectObject)
   const updateObject = useStore((s) => s.updateObject)
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null
-  const topView = useStore((s) => s.viewMode === 'top')
+  const topView = useStore((s) => s.viewMode === 'top' && s.tool !== 'walk')
   /** While dragging: the piece's centre minus the point on the ground that was grabbed. */
   const grab = useRef<{ x: number; z: number } | null>(null)
   const { width, depth, height } = object.size

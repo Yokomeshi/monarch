@@ -7,7 +7,7 @@ import { formatArea } from '../units'
 export function RoomLabels() {
   const units = useStore((s) => s.units)
   const rooms = useRooms()
-  const topView = useStore((s) => s.viewMode === 'top')
+  const topView = useStore((s) => s.viewMode === 'top' && s.tool !== 'walk')
   if (!topView) return null
 
   return (

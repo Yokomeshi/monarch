@@ -26,7 +26,7 @@ export interface Plan {
   calibrated: boolean
 }
 
-export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object'
+export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object' | 'walk'
 
 /** Nothing selected. Spread before setting one selection, so the kinds replace each other. */
 const NO_SELECTION = { selectedWallId: null, selectedRoomId: null, selectedOpeningId: null, selectedObjectId: null }
