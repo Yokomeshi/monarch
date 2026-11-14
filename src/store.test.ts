@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './store'
 import { blockGlb, crateObj } from './testModels'
+import { DEFAULT_SUN } from './model/sun'
 import { wallFootprints } from './model/wallGeometry'
 import { WALL_DEFAULTS } from './model/walls'
 import { applyPreset, DEFAULT_MATERIAL, PRESETS, ROOM_DEFAULTS } from './model/materials'
@@ -20,6 +21,7 @@ beforeEach(() => {
     walls: [],
     openings: [],
     objects: [],
+    sun: { ...DEFAULT_SUN },
     models: {},
     placingModelId: null,
     selectedObjectId: null,
@@ -367,5 +369,23 @@ describe('imported models', () => {
     store().loadProject(saved)
     expect(store().objects).toEqual(objects)
     expect(store().models[objects[0].modelId!]).toMatchObject({ name: 'crate.obj', format: 'obj' })
+  })
+})
+
+describe('sun study', () => {
+  it('is off to begin with, and a change keeps the other settings', () => {
+    expect(store().sun.enabled).toBe(false)
+    store().setSun({ enabled: true, latitude: -33.9 })
+    store().setSun({ hour: 9.5 })
+    expect(store().sun).toMatchObject({ enabled: true, latitude: -33.9, hour: 9.5 })
+  })
+
+  it('survives save and load', async () => {
+    store().setSun({ enabled: true, latitude: 51.5, day: 355, hour: 15.25, north: 90 })
+    const sun = store().sun
+    const saved = await store().saveProject()
+    store().setSun({ enabled: false, latitude: 0, day: 1, hour: 0, north: 0 })
+    store().loadProject(saved)
+    expect(store().sun).toEqual(sun)
   })
 })

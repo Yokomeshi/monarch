@@ -93,3 +93,48 @@ test('walk through a room: look, move, stop at walls, and leave', async ({ app }
   await click(app, top(0, -2))
   await expect(app.getByRole('heading', { name: 'Selected wall' })).toBeVisible()
 })
+
+test('the sun study drives light and shadow, and is saved', async ({ app }, testInfo) => {
+  await drawRoom(app) // walls 2.7 m high; the south wall is at z = +2, the north wall at z = -2
+  const top = await topView(app)
+  // A floor spot 1 m inside the north wall, 3 m from the south wall.
+  const spot = top(1.5, -1)
+  const readout = app.getByTestId('sun-readout')
+  const brightness = async () => (await colourAt(app, spot)).reduce((sum, c) => sum + c, 0) / 3
+
+  await app.getByLabel('Sun study').check()
+  await field(app, 'Latitude').fill('51.5')
+  await field(app, 'Date').fill('172') // 21 June
+  await field(app, 'Time').fill('12')
+  await expect(readout).toHaveText('The sun is 62° above the horizon, to the S.')
+  // A high southern sun: the south wall's shadow is 1.4 m long and falls short of the spot.
+  const summer = await brightness()
+
+  await field(app, 'Date').fill('355') // 21 December
+  await expect(readout).toHaveText('The sun is 15° above the horizon, to the S.')
+  // A low sun: the same wall's shadow is 10 m long and covers the whole floor.
+  const winter = await brightness()
+  expect(summer - winter, 'sunlit in summer, in shadow in winter').toBeGreaterThan(25)
+
+  await field(app, 'Time').fill('2')
+  await expect(readout).toHaveText('The sun is below the horizon.')
+  expect(summer - (await brightness()), 'dark at night').toBeGreaterThan(25)
+
+  // Turn the plan so north points down: the summer sun now comes over the other wall, which shades the spot.
+  await field(app, 'Date').fill('172')
+  await field(app, 'Time').fill('12')
+  expect(Math.abs((await brightness()) - summer), 'back to the summer noon light').toBeLessThan(10)
+  await field(app, 'North').fill('180')
+  expect(summer - (await brightness()), 'shaded once north is turned round').toBeGreaterThan(25)
+
+  const path = testInfo.outputPath('sun.json')
+  const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Save…' }).click()])
+  await download.saveAs(path)
+  await app.reload()
+  await expect(app.getByLabel('Sun study'), 'off in a new project').not.toBeChecked()
+  await app.getByTestId('project-input').setInputFiles(path)
+  await expect(app.getByLabel('Sun study')).toBeChecked()
+  await expect(field(app, 'Latitude')).toHaveValue('51.5')
+  await expect(field(app, 'North')).toHaveValue('180')
+  await expect(readout).toHaveText('The sun is 62° above the horizon, to the S.')
+})

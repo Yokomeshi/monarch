@@ -3,14 +3,15 @@
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import type { Wall, WallProps } from './model/walls'
 import type { Opening } from './model/openings'
+import { DEFAULT_SUN, type SunSettings } from './model/sun'
 import { LIBRARY, type ModelInfo, type ObjectKind, type PlacedObject, type Size3 } from './model/objects'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
 // Version 2 added room floor and ceiling materials, version 3 openings, version 4
-// door hinge and swing sides, version 5 furniture, and version 6 imported 3D models.
-// Older files still open.
-export const PROJECT_VERSION = 6
+// door hinge and swing sides, version 5 furniture, version 6 imported 3D models, and
+// version 7 the sun study. Older files still open.
+export const PROJECT_VERSION = 7
 
 export interface ProjectFile {
   app: 'monarch'
@@ -31,6 +32,7 @@ export interface ProjectFile {
   objects: PlacedObject[]
   /** Imported 3D model files by id. `data` is the file as a data URL. */
   models: Record<string, ModelInfo & { data: string }>
+  sun: SunSettings
   wallDefaults: WallProps
   rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
@@ -102,10 +104,27 @@ export function parseProject(text: string): ProjectFile {
     openings,
     objects: parseObjects(data.objects, textures, models),
     models,
+    sun: parseSun(data.sun),
     wallDefaults,
     rooms,
     textures,
   }
+}
+
+function parseSun(v: unknown): SunSettings {
+  if (v === undefined) return { ...DEFAULT_SUN } // version 6 or older
+  const within = (n: unknown, min: number, max: number): n is number => isFiniteNumber(n) && n >= min && n <= max
+  if (
+    !isObject(v) ||
+    typeof v.enabled !== 'boolean' ||
+    !within(v.latitude, -90, 90) ||
+    !within(v.day, 1, 365) ||
+    !within(v.hour, 0, 24) ||
+    !isFiniteNumber(v.north)
+  ) {
+    throw invalid('sun study')
+  }
+  return { enabled: v.enabled, latitude: v.latitude, day: v.day, hour: v.hour, north: v.north }
 }
 
 function parseSize(size: unknown, label: string): Size3 {

@@ -369,3 +369,20 @@ section > button + .hint {
   font-size: 13px;
   pointer-events: none;
 }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.check input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.sun-row {
+  grid-template-columns: 64px 1fr 62px;
+}
