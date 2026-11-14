@@ -3,12 +3,13 @@
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import type { Wall, WallProps } from './model/walls'
 import type { Opening } from './model/openings'
+import { LIBRARY, type ObjectKind, type PlacedObject } from './model/objects'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
-// Version 2 added room floor and ceiling materials, version 3 openings, and
-// version 4 door hinge and swing sides. Older files still open.
-export const PROJECT_VERSION = 4
+// Version 2 added room floor and ceiling materials, version 3 openings, version 4
+// door hinge and swing sides, and version 5 furniture. Older files still open.
+export const PROJECT_VERSION = 5
 
 export interface ProjectFile {
   app: 'monarch'
@@ -26,6 +27,7 @@ export interface ProjectFile {
   } | null
   walls: Wall[]
   openings: Opening[]
+  objects: PlacedObject[]
   wallDefaults: WallProps
   rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
@@ -39,9 +41,15 @@ export interface RoomFinishes {
 }
 
 /** Ids of the textures actually used, so unused uploads aren't saved. */
-export function usedTextureIds(walls: Wall[], wallDefaults: WallProps, rooms: RoomFinishes): string[] {
+export function usedTextureIds(
+  walls: Wall[],
+  wallDefaults: WallProps,
+  rooms: RoomFinishes,
+  objects: PlacedObject[],
+): string[] {
   const ids = [
     ...walls.map((w) => w.material.textureId),
+    ...objects.map((o) => o.material.textureId),
     wallDefaults.material.textureId,
     ...[rooms.defaults, ...Object.values(rooms.materials)].flatMap((r) => [r.floor.textureId, r.ceiling.textureId]),
   ]
@@ -88,10 +96,37 @@ export function parseProject(text: string): ProjectFile {
     plan: parsePlan(data.plan),
     walls,
     openings,
+    objects: parseObjects(data.objects, textures),
     wallDefaults,
     rooms,
     textures,
   }
+}
+
+function parseObjects(list: unknown, textures: ProjectFile['textures']): PlacedObject[] {
+  if (list === undefined) return [] // version 4 or older
+  if (!Array.isArray(list)) throw invalid('furniture')
+  const objects = list.map((o, i): PlacedObject => {
+    const label = `furniture ${i + 1}`
+    if (!isObject(o) || typeof o.id !== 'string' || !o.id) throw invalid(label)
+    if (typeof o.kind !== 'string' || !(o.kind in LIBRARY)) throw invalid(`${label} kind`)
+    const { position, size, rotation } = o
+    if (!isObject(position) || !isFiniteNumber(position.x) || !isFiniteNumber(position.z)) throw invalid(`${label} position`)
+    if (!isObject(size) || !isPositive(size.width) || !isPositive(size.depth) || !isPositive(size.height)) {
+      throw invalid(`${label} size`)
+    }
+    if (!isFiniteNumber(rotation)) throw invalid(`${label} rotation`)
+    return {
+      id: o.id,
+      kind: o.kind as ObjectKind,
+      position: { x: position.x, z: position.z },
+      rotation,
+      size: { width: size.width, depth: size.depth, height: size.height },
+      material: parseMaterial(o.material, label, textures),
+    }
+  })
+  if (new Set(objects.map((o) => o.id)).size !== objects.length) throw invalid('furniture (duplicate ids)')
+  return objects
 }
 
 function parseOpenings(list: unknown, wallIds: Set<string>): Opening[] {

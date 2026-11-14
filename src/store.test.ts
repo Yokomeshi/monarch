@@ -18,6 +18,8 @@ beforeEach(() => {
   useStore.setState({
     walls: [],
     openings: [],
+    objects: [],
+    selectedObjectId: null,
     draft: [],
     selectedWallId: null,
     selectedRoomId: null,
@@ -248,5 +250,66 @@ describe('openings', () => {
     store().clearWalls()
     store().loadProject(saved)
     expect(store().openings).toEqual(openings)
+  })
+})
+
+describe('furniture', () => {
+  it('placing a piece puts it at the clicked point, selects it and ends the tool', () => {
+    store().startPlacingObject('sofa')
+    expect(store().tool).toBe('object')
+    store().placeObject({ x: 2, z: -1 })
+    const [sofa] = store().objects
+    expect(sofa).toMatchObject({ kind: 'sofa', position: { x: 2, z: -1 } })
+    expect(store().selectedObjectId).toBe(sofa.id)
+    expect(store().tool).toBe('none')
+  })
+
+  it('moves, resizes within limits and rotates a piece', () => {
+    store().startPlacingObject('table')
+    store().placeObject({ x: 0, z: 0 })
+    const id = store().objects[0].id
+    store().updateObject(id, { position: { x: 3, z: 4 }, rotation: 450 })
+    store().updateObject(id, { size: { width: 99, depth: 1, height: 0.8 } })
+    expect(store().objects[0]).toMatchObject({
+      position: { x: 3, z: 4 }, rotation: 90, size: { width: 10, depth: 1, height: 0.8 },
+    })
+  })
+
+  it('selecting a piece replaces any other selection, and the reverse', () => {
+    const [a] = drawL()
+    store().startPlacingObject('chair')
+    store().placeObject({ x: 0, z: 0 })
+    const id = store().objects[0].id
+    store().selectWall(a.id)
+    expect(store().selectedObjectId).toBeNull()
+    store().selectObject(id)
+    expect(store().selectedWallId).toBeNull()
+    store().selectRoom('room-a')
+    expect(store().selectedObjectId).toBeNull()
+  })
+
+  it('deleting a piece removes just that one; clearing walls leaves furniture alone', () => {
+    drawL()
+    for (const kind of ['bed', 'desk'] as const) {
+      store().startPlacingObject(kind)
+      store().placeObject({ x: 0, z: 0 })
+    }
+    const [bed, desk] = store().objects
+    store().deleteObject(bed.id)
+    expect(store().objects.map((o) => o.id)).toEqual([desk.id])
+    expect(store().selectedObjectId).toBe(desk.id)
+    store().clearWalls()
+    expect(store().objects).toHaveLength(1)
+  })
+
+  it('furniture survives save and load', async () => {
+    store().startPlacingObject('wardrobe')
+    store().placeObject({ x: 1, z: 2 })
+    store().updateObject(store().objects[0].id, { rotation: 90, material: applyPreset(DEFAULT_MATERIAL, PRESETS[5]) })
+    const objects = store().objects
+    const saved = await store().saveProject()
+    store().deleteObject(objects[0].id)
+    store().loadProject(saved)
+    expect(store().objects).toEqual(objects)
   })
 })

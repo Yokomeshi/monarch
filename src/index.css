@@ -321,3 +321,17 @@ section > .row + .hint,
 section > button + .hint {
   margin-top: 8px;
 }
+
+.tool-object canvas {
+  cursor: crosshair;
+}
+
+.library {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.library + .hint {
+  margin-top: 8px;
+}

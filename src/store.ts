@@ -6,6 +6,7 @@ import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type W
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import { editOpening, openingAt, scaleOpenings, type Opening } from './model/openings'
+import { createObject, resizeObject, scaleObjects, type ObjectKind, type PlacedObject } from './model/objects'
 
 export interface Texture {
   url: string
@@ -21,7 +22,10 @@ export interface Plan {
   calibrated: boolean
 }
 
-export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window'
+export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object'
+
+/** Nothing selected. Spread before setting one selection, so the kinds replace each other. */
+const NO_SELECTION = { selectedWallId: null, selectedRoomId: null, selectedOpeningId: null, selectedObjectId: null }
 export type ViewMode = '3d' | 'top'
 
 // Before calibration the plan is shown 20 m wide so it fits the default view.
@@ -46,6 +50,11 @@ interface State {
   selectedWallId: string | null
   selectedRoomId: string | null
   selectedOpeningId: string | null
+  /** Furniture and other placed objects. */
+  objects: PlacedObject[]
+  selectedObjectId: string | null
+  /** The piece the furniture tool will place. */
+  placingKind: ObjectKind
   /** The last attempt to place a door or window found no room for it. */
   placementFailed: boolean
   /** Floor and ceiling materials for rooms without their own. */
@@ -85,6 +94,13 @@ interface State {
   /** Change an opening. Ignored if the result would run into another opening. */
   updateOpening: (id: string, patch: Partial<Opening>) => void
   deleteOpening: (id: string) => void
+  /** Arm the furniture tool: the next click on the ground places this piece. */
+  startPlacingObject: (kind: ObjectKind) => void
+  /** With the furniture tool: place the piece, select it and end the tool. */
+  placeObject: (position: Vec2) => void
+  selectObject: (id: string | null) => void
+  updateObject: (id: string, patch: Partial<PlacedObject>) => void
+  deleteObject: (id: string) => void
   selectRoom: (id: string | null) => void
   setRoomMaterial: (id: string, part: keyof RoomMaterials, material: Material) => void
   /** Give every room this room's floor and ceiling. */
@@ -129,6 +145,9 @@ export const useStore = create<State>()((set, get) => ({
   selectedWallId: null,
   selectedRoomId: null,
   selectedOpeningId: null,
+  objects: [],
+  selectedObjectId: null,
+  placingKind: 'bed',
   placementFailed: false,
   roomDefaults: { ...ROOM_DEFAULTS },
   roomMaterials: {},
@@ -145,14 +164,7 @@ export const useStore = create<State>()((set, get) => ({
     // Leaving the wall tool keeps what was drawn so far.
     if (get().tool === 'wall') get().finishDraft()
     const keep = tool === 'none'
-    set((s) => ({
-      tool,
-      calibrationPoints: [],
-      placementFailed: false,
-      selectedWallId: keep ? s.selectedWallId : null,
-      selectedRoomId: keep ? s.selectedRoomId : null,
-      selectedOpeningId: keep ? s.selectedOpeningId : null,
-    }))
+    set({ tool, calibrationPoints: [], placementFailed: false, ...(keep ? {} : NO_SELECTION) })
   },
 
   loadPlan: async (file) => {
@@ -199,6 +211,7 @@ export const useStore = create<State>()((set, get) => ({
       // Walls traced over the plan stay on the drawing.
       walls: scaleWalls(walls, newScale / plan.metresPerPx),
       openings: scaleOpenings(s.openings, newScale / plan.metresPerPx),
+      objects: scaleObjects(s.objects, newScale / plan.metresPerPx),
       tool: 'none',
       calibrationPoints: [],
       calibrationLine: [a, b],
@@ -217,7 +230,7 @@ export const useStore = create<State>()((set, get) => ({
 
   clearWalls: () => set({ walls: [], openings: [], draft: [], selectedWallId: null, selectedOpeningId: null }),
 
-  selectWall: (selectedWallId) => set({ selectedWallId, selectedRoomId: null, selectedOpeningId: null }),
+  selectWall: (selectedWallId) => set({ ...NO_SELECTION, selectedWallId }),
 
   placeOpening: (wallId, position) => {
     const { walls, openings, tool } = get()
@@ -232,14 +245,13 @@ export const useStore = create<State>()((set, get) => ({
       openings: [...openings, opening],
       tool: 'none',
       placementFailed: false,
+      ...NO_SELECTION,
       selectedOpeningId: opening.id,
-      selectedWallId: null,
-      selectedRoomId: null,
     })
     return true
   },
 
-  selectOpening: (selectedOpeningId) => set({ selectedOpeningId, selectedWallId: null, selectedRoomId: null }),
+  selectOpening: (selectedOpeningId) => set({ ...NO_SELECTION, selectedOpeningId }),
 
   updateOpening: (id, patch) => {
     const { walls, openings } = get()
@@ -255,7 +267,30 @@ export const useStore = create<State>()((set, get) => ({
       selectedOpeningId: s.selectedOpeningId === id ? null : s.selectedOpeningId,
     })),
 
-  selectRoom: (selectedRoomId) => set({ selectedRoomId, selectedWallId: null, selectedOpeningId: null }),
+  startPlacingObject: (placingKind) => {
+    get().setTool('object')
+    set({ placingKind })
+  },
+
+  placeObject: (position) => {
+    const { tool, placingKind, objects } = get()
+    if (tool !== 'object') return
+    const object = createObject(placingKind, position)
+    set({ objects: [...objects, object], tool: 'none', ...NO_SELECTION, selectedObjectId: object.id })
+  },
+
+  selectObject: (selectedObjectId) => set({ ...NO_SELECTION, selectedObjectId }),
+
+  updateObject: (id, patch) =>
+    set((s) => ({ objects: s.objects.map((o) => (o.id === id ? resizeObject(o, patch) : o)) })),
+
+  deleteObject: (id) =>
+    set((s) => ({
+      objects: s.objects.filter((o) => o.id !== id),
+      selectedObjectId: s.selectedObjectId === id ? null : s.selectedObjectId,
+    })),
+
+  selectRoom: (selectedRoomId) => set({ ...NO_SELECTION, selectedRoomId }),
 
   setRoomMaterial: (id, part, material) =>
     set((s) => ({
@@ -302,7 +337,7 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   saveProject: async () => {
-    const { units, plan, calibrationLine, walls, openings, wallDefaults, textures, roomDefaults, roomMaterials } =
+    const { units, plan, calibrationLine, walls, openings, objects, wallDefaults, textures, roomDefaults, roomMaterials } =
       get()
     const rooms = { defaults: roomDefaults, materials: roomMaterials }
     const file: ProjectFile = {
@@ -320,11 +355,12 @@ export const useStore = create<State>()((set, get) => ({
       },
       walls,
       openings,
+      objects,
       wallDefaults,
       rooms,
       textures: {},
     }
-    for (const id of usedTextureIds(walls, wallDefaults, rooms)) {
+    for (const id of usedTextureIds(walls, wallDefaults, rooms, objects)) {
       const t = textures[id]
       if (t) file.textures[id] = { name: t.name, image: await toDataUrl(t.url) }
     }
@@ -350,11 +386,11 @@ export const useStore = create<State>()((set, get) => ({
       calibrationPoints: [],
       walls: file.walls,
       openings: file.openings,
+      objects: file.objects,
       wallDefaults: file.wallDefaults,
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,
-      selectedRoomId: null,
-      selectedOpeningId: null,
+      ...NO_SELECTION,
       textures: Object.fromEntries(
         Object.entries(file.textures).map(([id, t]) => [id, { url: t.image, name: t.name }]),
       ),
