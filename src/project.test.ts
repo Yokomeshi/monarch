@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
 import { DEFAULT_MATERIAL, ROOM_DEFAULTS } from './model/materials'
 import { createWall, WALL_DEFAULTS } from './model/walls'
-import { createObject } from './model/objects'
+import { createModelObject, createObject } from './model/objects'
 
 const IMG = 'data:image/png;base64,AAAA'
+const MODEL = 'data:application/octet-stream;base64,AAAA'
 const p = (x: number, z: number) => ({ x, z })
 
 function sample(): ProjectFile {
@@ -30,7 +31,11 @@ function sample(): ProjectFile {
     openings: [
       { id: 'o1', wallId: walls[0].id, type: 'door', position: 2, width: 0.9, height: 2.1, sill: 0, hinge: 'end', swing: 'right' },
     ],
-    objects: [{ ...createObject('sofa', p(1, 2)), rotation: 90 }],
+    objects: [
+      { ...createObject('sofa', p(1, 2)), rotation: 90 },
+      createModelObject('m1', { width: 1, depth: 2, height: 3 }, p(0, 0)),
+    ],
+    models: { m1: { name: 'lamp.glb', format: 'glb', naturalSize: { width: 1, depth: 2, height: 3 }, data: MODEL } },
     wallDefaults: WALL_DEFAULTS,
     rooms: {
       defaults: ROOM_DEFAULTS,
@@ -53,7 +58,7 @@ describe('parseProject', () => {
   })
 
   it('accepts a project with no plan, walls or textures', () => {
-    const empty = { ...sample(), plan: null, walls: [], openings: [], objects: [], textures: {}, rooms: { defaults: ROOM_DEFAULTS, materials: {} } }
+    const empty = { ...sample(), plan: null, walls: [], openings: [], objects: [], models: {}, textures: {}, rooms: { defaults: ROOM_DEFAULTS, materials: {} } }
     expect(parseProject(JSON.stringify(empty))).toEqual(empty)
   })
 
@@ -100,10 +105,31 @@ describe('parseProject', () => {
     expect(project.openings).toEqual([])
   })
 
+  it('opens a version 5 file, which has no imported models', () => {
+    const project = parse((d) => {
+      d.version = 5
+      delete d.models
+      d.objects.pop()
+    })()
+    expect(project.models).toEqual({})
+    expect(project.objects).toHaveLength(1)
+  })
+
+  it.each([
+    ['a placed model whose file is missing', (d: any) => delete d.models.m1],
+    ['a placed model with no file reference', (d: any) => delete d.objects[1].modelId],
+    ['a model file that is not embedded data', (d: any) => (d.models.m1.data = 'https://example.com/lamp.glb')],
+    ['an unknown model format', (d: any) => (d.models.m1.format = 'fbx')],
+    ['a model with a zero natural size', (d: any) => (d.models.m1.naturalSize.height = 0)],
+  ])('rejects %s', (_name, edit) => {
+    expect(parse(edit)).toThrow(/damaged/)
+  })
+
   it('opens a version 4 file, which has no furniture', () => {
     const project = parse((d) => {
       d.version = 4
       delete d.objects
+      delete d.models
     })()
     expect(project.objects).toEqual([])
   })

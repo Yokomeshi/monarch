@@ -3,13 +3,14 @@
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import type { Wall, WallProps } from './model/walls'
 import type { Opening } from './model/openings'
-import { LIBRARY, type ObjectKind, type PlacedObject } from './model/objects'
+import { LIBRARY, type ModelInfo, type ObjectKind, type PlacedObject, type Size3 } from './model/objects'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
 // Version 2 added room floor and ceiling materials, version 3 openings, version 4
-// door hinge and swing sides, and version 5 furniture. Older files still open.
-export const PROJECT_VERSION = 5
+// door hinge and swing sides, version 5 furniture, and version 6 imported 3D models.
+// Older files still open.
+export const PROJECT_VERSION = 6
 
 export interface ProjectFile {
   app: 'monarch'
@@ -28,6 +29,8 @@ export interface ProjectFile {
   walls: Wall[]
   openings: Opening[]
   objects: PlacedObject[]
+  /** Imported 3D model files by id. `data` is the file as a data URL. */
+  models: Record<string, ModelInfo & { data: string }>
   wallDefaults: WallProps
   rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
@@ -88,6 +91,7 @@ export function parseProject(text: string): ProjectFile {
   const wallDefaults = parseWallProps(data.wallDefaults, 'wall defaults', textures)
 
   const rooms = parseRooms(data.rooms, textures)
+  const models = parseModels(data.models)
   const openings = parseOpenings(data.openings, new Set(walls.map((w) => w.id)))
   return {
     app: 'monarch',
@@ -96,32 +100,60 @@ export function parseProject(text: string): ProjectFile {
     plan: parsePlan(data.plan),
     walls,
     openings,
-    objects: parseObjects(data.objects, textures),
+    objects: parseObjects(data.objects, textures, models),
+    models,
     wallDefaults,
     rooms,
     textures,
   }
 }
 
-function parseObjects(list: unknown, textures: ProjectFile['textures']): PlacedObject[] {
+function parseSize(size: unknown, label: string): Size3 {
+  if (!isObject(size) || !isPositive(size.width) || !isPositive(size.depth) || !isPositive(size.height)) {
+    throw invalid(`${label} size`)
+  }
+  return { width: size.width, depth: size.depth, height: size.height }
+}
+
+function parseModels(m: unknown): ProjectFile['models'] {
+  if (m === undefined) return {} // version 5 or older
+  if (!isObject(m)) throw invalid('models')
+  return Object.fromEntries(
+    Object.entries(m).map(([id, v]) => {
+      const label = `model "${id}"`
+      if (!isObject(v) || typeof v.name !== 'string') throw invalid(label)
+      if (v.format !== 'glb' && v.format !== 'gltf' && v.format !== 'obj') throw invalid(`${label} format`)
+      if (typeof v.data !== 'string' || !v.data.startsWith('data:')) throw invalid(`${label} file`)
+      return [id, { name: v.name, format: v.format, naturalSize: parseSize(v.naturalSize, label), data: v.data }]
+    }),
+  )
+}
+
+function parseObjects(
+  list: unknown,
+  textures: ProjectFile['textures'],
+  models: ProjectFile['models'],
+): PlacedObject[] {
   if (list === undefined) return [] // version 4 or older
   if (!Array.isArray(list)) throw invalid('furniture')
   const objects = list.map((o, i): PlacedObject => {
     const label = `furniture ${i + 1}`
     if (!isObject(o) || typeof o.id !== 'string' || !o.id) throw invalid(label)
-    if (typeof o.kind !== 'string' || !(o.kind in LIBRARY)) throw invalid(`${label} kind`)
-    const { position, size, rotation } = o
-    if (!isObject(position) || !isFiniteNumber(position.x) || !isFiniteNumber(position.z)) throw invalid(`${label} position`)
-    if (!isObject(size) || !isPositive(size.width) || !isPositive(size.depth) || !isPositive(size.height)) {
-      throw invalid(`${label} size`)
+    const isModel = o.kind === 'model'
+    if (typeof o.kind !== 'string' || !(isModel || o.kind in LIBRARY)) throw invalid(`${label} kind`)
+    if (isModel && (typeof o.modelId !== 'string' || !(o.modelId in models))) {
+      throw invalid(`${label} (its model file is missing)`)
     }
+    const { position, rotation } = o
+    if (!isObject(position) || !isFiniteNumber(position.x) || !isFiniteNumber(position.z)) throw invalid(`${label} position`)
     if (!isFiniteNumber(rotation)) throw invalid(`${label} rotation`)
     return {
       id: o.id,
-      kind: o.kind as ObjectKind,
+      kind: o.kind as ObjectKind | 'model',
+      ...(isModel && { modelId: o.modelId as string }),
       position: { x: position.x, z: position.z },
       rotation,
-      size: { width: size.width, depth: size.depth, height: size.height },
+      size: parseSize(o.size, label),
       material: parseMaterial(o.material, label, textures),
     }
   })

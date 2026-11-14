@@ -7,6 +7,7 @@ import { useStore } from '../store'
 import { objectParts, type PlacedObject } from '../model/objects'
 import { snapToWalls } from '../model/objectSnap'
 import { Surface } from './Surface'
+import { ImportedModel } from './ImportedModel'
 
 const MAX_CLICK_DRAG_PX = 4
 const GROUND = new Plane(new Vector3(0, 1, 0), 0)
@@ -99,6 +100,7 @@ function ObjectModel({ object, selected, interactive }: { object: PlacedObject; 
           topView && <Edges color="#2b2f36" lineWidth={1.5} />
         )}
       </mesh>
+      {object.kind === 'model' && <ImportedModel object={object} />}
       {parts.map((part, i) => (
         <mesh key={i} position={part.position} castShadow receiveShadow>
           <boxGeometry args={part.size} />

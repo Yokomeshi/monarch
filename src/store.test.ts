@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './store'
+import { blockGlb, crateObj } from './testModels'
 import { wallFootprints } from './model/wallGeometry'
 import { WALL_DEFAULTS } from './model/walls'
 import { applyPreset, DEFAULT_MATERIAL, PRESETS, ROOM_DEFAULTS } from './model/materials'
@@ -19,6 +20,8 @@ beforeEach(() => {
     walls: [],
     openings: [],
     objects: [],
+    models: {},
+    placingModelId: null,
     selectedObjectId: null,
     draft: [],
     selectedWallId: null,
@@ -321,5 +324,48 @@ describe('furniture', () => {
     store().deleteObject(objects[0].id)
     store().loadProject(saved)
     expect(store().objects).toEqual(objects)
+  })
+})
+
+describe('imported models', () => {
+  it('importing a model arms the tool; placing it uses the model at its natural size', async () => {
+    await store().importModel(blockGlb())
+    const [id] = Object.keys(store().models)
+    expect(store().models[id]).toMatchObject({ name: 'block.glb', format: 'glb' })
+    expect(store().tool).toBe('object')
+    store().placeObject({ x: 1, z: 2 })
+    const [placed] = store().objects
+    expect(placed).toMatchObject({ kind: 'model', modelId: id, position: { x: 1, z: 2 } })
+    expect(placed.size.height).toBeCloseTo(2, 6)
+    expect(store().selectedObjectId).toBe(placed.id)
+  })
+
+  it('a bad file is refused and nothing is added', async () => {
+    await expect(store().importModel(new File(['hello'], 'fake.glb'))).rejects.toThrow(/Couldn't read/)
+    expect(store().models).toEqual({})
+    expect(store().tool).toBe('none')
+  })
+
+  it('choosing a library piece after a model places the library piece', async () => {
+    await store().importModel(crateObj())
+    store().startPlacingObject('chair')
+    store().placeObject({ x: 0, z: 0 })
+    expect(store().objects[0].kind).toBe('chair')
+  })
+
+  it('placed models are saved with their file embedded, and reopen', async () => {
+    await store().importModel(crateObj())
+    store().placeObject({ x: 0, z: 0 })
+    await store().importModel(blockGlb()) // imported but never placed: not saved
+    store().setTool('none')
+    const objects = store().objects
+    const saved = await store().saveProject()
+    expect(Object.keys(JSON.parse(saved).models)).toEqual([objects[0].modelId])
+    expect(JSON.parse(saved).models[objects[0].modelId!].data).toMatch(/^data:/)
+
+    useStore.setState({ objects: [], models: {} })
+    store().loadProject(saved)
+    expect(store().objects).toEqual(objects)
+    expect(store().models[objects[0].modelId!]).toMatchObject({ name: 'crate.obj', format: 'obj' })
   })
 })

@@ -7,8 +7,10 @@ import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from 
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import { editOpening, openingAt, scaleOpenings, type Opening } from './model/openings'
 import {
-  createObject, duplicateObject, resizeObject, scaleObjects, type ObjectKind, type PlacedObject,
+  createModelObject, createObject, duplicateObject, fitSize, resizeObject, scaleObjects, type ModelInfo, type ObjectKind,
+  type PlacedObject,
 } from './model/objects'
+import { inspectModelFile } from './model3d'
 
 export interface Texture {
   url: string
@@ -55,8 +57,12 @@ interface State {
   /** Furniture and other placed objects. */
   objects: PlacedObject[]
   selectedObjectId: string | null
-  /** The piece the furniture tool will place. */
+  /** The library piece the furniture tool will place, unless a model is chosen. */
   placingKind: ObjectKind
+  /** The imported model the furniture tool will place, if any. */
+  placingModelId: string | null
+  /** Imported 3D model files, by id. `url` is a blob: URL, or a data: URL after opening a project. */
+  models: Record<string, ModelInfo & { url: string }>
   /** The last attempt to place a door or window found no room for it. */
   placementFailed: boolean
   /** Floor and ceiling materials for rooms without their own. */
@@ -98,6 +104,10 @@ interface State {
   deleteOpening: (id: string) => void
   /** Arm the furniture tool: the next click on the ground places this piece. */
   startPlacingObject: (kind: ObjectKind) => void
+  /** Read a 3D model file, then arm the furniture tool with it. Throws if the file can't be used. */
+  importModel: (file: File) => Promise<void>
+  /** Arm the furniture tool with an already imported model. */
+  startPlacingModel: (id: string) => void
   /** With the furniture tool: place the piece, select it and end the tool. */
   placeObject: (position: Vec2) => void
   selectObject: (id: string | null) => void
@@ -123,12 +133,11 @@ interface State {
 async function toDataUrl(url: string): Promise<string> {
   if (url.startsWith('data:')) return url
   const blob = await (await fetch(url)).blob()
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(blob)
-  })
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  // btoa takes a binary string; build it in chunks to stay within argument limits.
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`
 }
 
 function revoke(url: string) {
@@ -152,6 +161,8 @@ export const useStore = create<State>()((set, get) => ({
   objects: [],
   selectedObjectId: null,
   placingKind: 'bed',
+  placingModelId: null,
+  models: {},
   placementFailed: false,
   roomDefaults: { ...ROOM_DEFAULTS },
   roomMaterials: {},
@@ -273,13 +284,28 @@ export const useStore = create<State>()((set, get) => ({
 
   startPlacingObject: (placingKind) => {
     get().setTool('object')
-    set({ placingKind })
+    set({ placingKind, placingModelId: null })
+  },
+
+  importModel: async (file) => {
+    const { url, format, naturalSize } = await inspectModelFile(file)
+    const id = crypto.randomUUID()
+    set((s) => ({ models: { ...s.models, [id]: { url, name: file.name, format, naturalSize } } }))
+    get().startPlacingModel(id)
+  },
+
+  startPlacingModel: (placingModelId) => {
+    get().setTool('object')
+    set({ placingModelId })
   },
 
   placeObject: (position) => {
-    const { tool, placingKind, objects } = get()
+    const { tool, placingKind, placingModelId, models, objects } = get()
     if (tool !== 'object') return
-    const object = createObject(placingKind, position)
+    const model = placingModelId && models[placingModelId]
+    const object = model
+      ? createModelObject(placingModelId, fitSize(model.naturalSize), position)
+      : createObject(placingKind, position)
     set({ objects: [...objects, object], tool: 'none', ...NO_SELECTION, selectedObjectId: object.id })
   },
 
@@ -367,9 +393,14 @@ export const useStore = create<State>()((set, get) => ({
       walls,
       openings,
       objects,
+      models: {},
       wallDefaults,
       rooms,
       textures: {},
+    }
+    for (const id of new Set(objects.map((o) => o.modelId))) {
+      const m = id && get().models[id]
+      if (m) file.models[id] = { name: m.name, format: m.format, naturalSize: m.naturalSize, data: await toDataUrl(m.url) }
     }
     for (const id of usedTextureIds(walls, wallDefaults, rooms, objects)) {
       const t = textures[id]
@@ -383,6 +414,7 @@ export const useStore = create<State>()((set, get) => ({
     const old = get()
     if (old.plan) revoke(old.plan.url)
     Object.values(old.textures).forEach((t) => revoke(t.url))
+    Object.values(old.models).forEach((m) => revoke(m.url))
     set((s) => ({
       units: file.units,
       plan: file.plan && {
@@ -398,6 +430,10 @@ export const useStore = create<State>()((set, get) => ({
       walls: file.walls,
       openings: file.openings,
       objects: file.objects,
+      models: Object.fromEntries(
+        Object.entries(file.models).map(([id, { data, ...info }]) => [id, { ...info, url: data }]),
+      ),
+      placingModelId: null,
       wallDefaults: file.wallDefaults,
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,

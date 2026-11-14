@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createObject, LIBRARY, objectParts, resizeObject, scaleObjects, type ObjectKind, type Size3 } from './objects'
+import {
+  createModelObject, createObject, duplicateObject, fitSize, LIBRARY, modelFormat, objectParts, resizeObject,
+  resizeProportional, scaleObjects, type ObjectKind, type Size3,
+} from './objects'
 
 const kinds = Object.keys(LIBRARY) as ObjectKind[]
 const p = (x: number, z: number) => ({ x, z })
@@ -83,5 +86,41 @@ describe('placed objects', () => {
   it('recalibrating the plan moves furniture with it but keeps its real size', () => {
     const o = createObject('table', p(2, -4))
     expect(scaleObjects([o], 0.5)).toEqual([{ ...o, position: p(1, -2) }])
+  })
+})
+
+describe('imported models', () => {
+  it('recognises model files by extension, whatever the case', () => {
+    expect(modelFormat('Chair.GLB')).toBe('glb')
+    expect(modelFormat('sofa.v2.gltf')).toBe('gltf')
+    expect(modelFormat('table.obj')).toBe('obj')
+    expect(modelFormat('photo.png')).toBeNull()
+    expect(modelFormat('glb')).toBeNull()
+  })
+
+  it('keeps a plausible natural size, as glTF files are in metres', () => {
+    const size = { width: 0.6, depth: 0.55, height: 0.9 }
+    expect(fitSize(size)).toEqual(size)
+  })
+
+  it('scales an absurdly large or small model so its longest side is 1 m', () => {
+    // Modelled in millimetres: 600 x 550 x 900.
+    expect(fitSize({ width: 600, depth: 550, height: 900 })).toEqual({ width: 600 / 900, depth: 550 / 900, height: 1 })
+    const tiny = fitSize({ width: 0.002, depth: 0.001, height: 0.001 })
+    expect(tiny.width).toBeCloseTo(1, 9)
+    expect(tiny.depth).toBeCloseTo(0.5, 9)
+  })
+
+  it('resizing one dimension in proportion scales the others to match', () => {
+    const size = { width: 2, depth: 1, height: 0.5 }
+    expect(resizeProportional(size, 'width', 3)).toEqual({ width: 3, depth: 1.5, height: 0.75 })
+    expect(resizeProportional(size, 'height', 1)).toEqual({ width: 4, depth: 2, height: 1 })
+  })
+
+  it('a placed model refers to its file, has no library parts, and can be duplicated', () => {
+    const o = createModelObject('m1', { width: 1, depth: 2, height: 3 }, p(4, 5))
+    expect(o).toMatchObject({ kind: 'model', modelId: 'm1', position: p(4, 5), rotation: 0, size: { width: 1, depth: 2, height: 3 } })
+    expect(objectParts(o)).toEqual([])
+    expect(duplicateObject(o).modelId).toBe('m1')
   })
 })
