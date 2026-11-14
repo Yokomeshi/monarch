@@ -384,7 +384,7 @@ section > button + .hint {
 }
 
 .sun-row {
-  grid-template-columns: 64px 1fr 62px;
+  grid-template-columns: 76px 1fr 62px;
 }
 
 .tool-light canvas {

@@ -71,6 +71,7 @@ function Fixture({ light, ceiling, selected, shadows, interactive }: FixtureProp
   /** While dragging: the light's position minus the point on the ground that was grabbed. */
   const grab = useRef<{ x: number; z: number } | null>(null)
   const colour = kelvinToHex(light.kelvin)
+  const topView = useStore((s) => s.viewMode === 'top' && s.tool !== 'walk')
 
   const groundPoint = (e: ThreeEvent<PointerEvent>) => e.ray.intersectPlane(GROUND, new Vector3())
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
@@ -110,7 +111,12 @@ function Fixture({ light, ceiling, selected, shadows, interactive }: FixtureProp
       <mesh position-y={-FIXTURE_DEPTH / 2} {...handlers}>
         <cylinderGeometry args={[FIXTURE_RADIUS, FIXTURE_RADIUS, FIXTURE_DEPTH, 24]} />
         <meshBasicMaterial color={colour} toneMapped={false} />
-        {selected && <Edges color="#36c5f0" lineWidth={3} threshold={30} />}
+        {selected ? (
+          <Edges color="#36c5f0" lineWidth={3} threshold={30} />
+        ) : (
+          // In Top view a fitting can match the floor under it, so it gets a plan-style outline.
+          topView && <Edges color="#2b2f36" lineWidth={1.5} threshold={30} />
+        )}
       </mesh>
       {/* The source hangs just below the fitting, so the ceiling around it is lit too. */}
       <pointLight
