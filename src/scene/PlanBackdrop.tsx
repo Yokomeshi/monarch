@@ -14,7 +14,7 @@ export function PlanBackdrop({ plan }: { plan: Plan }) {
     texture.needsUpdate = true
   }, [texture])
 
-  const calibrating = useStore((s) => s.calibrating)
+  const calibrating = useStore((s) => s.tool === 'calibrate')
   const addCalibrationPoint = useStore((s) => s.addCalibrationPoint)
 
   const width = plan.widthPx * plan.metresPerPx
@@ -31,13 +31,7 @@ export function PlanBackdrop({ plan }: { plan: Plan }) {
   }
 
   return (
-    <mesh
-      rotation-x={-Math.PI / 2}
-      position-y={0.002}
-      onClick={onClick}
-      onPointerOver={() => calibrating && (document.body.style.cursor = 'crosshair')}
-      onPointerOut={() => (document.body.style.cursor = '')}
-    >
+    <mesh rotation-x={-Math.PI / 2} position-y={0.002} onClick={onClick}>
       <planeGeometry args={[width, depth]} />
       <meshBasicMaterial map={texture} toneMapped={false} />
     </mesh>

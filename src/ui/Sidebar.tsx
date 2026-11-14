@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useStore } from '../store'
 import { formatLength, parseLength } from '../units'
+import { wallLength } from '../model/walls'
 
 export function Sidebar() {
   const units = useStore((s) => s.units)
@@ -71,16 +72,18 @@ export function Sidebar() {
       </section>
 
       {plan && <CalibrationPanel />}
+      <WallsPanel />
     </aside>
   )
 }
 
 function CalibrationPanel() {
   const units = useStore((s) => s.units)
-  const calibrating = useStore((s) => s.calibrating)
+  const calibrating = useStore((s) => s.tool === 'calibrate')
   const points = useStore((s) => s.calibrationPoints)
-  const start = useStore((s) => s.startCalibration)
-  const cancel = useStore((s) => s.cancelCalibration)
+  const setTool = useStore((s) => s.setTool)
+  const start = () => setTool('calibrate')
+  const cancel = useCallback(() => setTool('none'), [setTool])
   const apply = useStore((s) => s.applyCalibration)
   const [distance, setDistance] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -109,7 +112,9 @@ function CalibrationPanel() {
       <h2>Scale</h2>
       {!calibrating && (
         <>
-          <p className="hint">Click two points on the plan whose real distance you know.</p>
+          <p className="hint">
+            Click two points on the plan whose real distance you know. The Top view is most precise.
+          </p>
           <button onClick={start}>Calibrate scale</button>
         </>
       )}
@@ -139,6 +144,58 @@ function CalibrationPanel() {
             </button>
           </div>
         </form>
+      )}
+    </section>
+  )
+}
+
+function WallsPanel() {
+  const units = useStore((s) => s.units)
+  const walls = useStore((s) => s.walls)
+  const drawing = useStore((s) => s.tool === 'wall')
+  const draft = useStore((s) => s.draft)
+  const setTool = useStore((s) => s.setTool)
+  const clearWalls = useStore((s) => s.clearWalls)
+  const total = walls.reduce((sum, w) => sum + wallLength(w), 0)
+
+  return (
+    <section>
+      <h2>Walls</h2>
+      {drawing ? (
+        <>
+          <p className="hint">
+            {draft.length === 0
+              ? 'Click to place the first corner.'
+              : 'Click to place the next corner. Click the first corner to close the room.'}
+          </p>
+          <ul className="keys">
+            <li>
+              <kbd>Shift</kbd> lock to 45° steps
+            </li>
+            <li>
+              <kbd>Backspace</kbd> remove last corner
+            </li>
+            <li>
+              <kbd>Enter</kbd> / <kbd>Esc</kbd> finish
+            </li>
+          </ul>
+          <button onClick={() => setTool('none')}>Done</button>
+        </>
+      ) : (
+        <button onClick={() => setTool('wall')}>Draw walls</button>
+      )}
+      {walls.length > 0 && (
+        <>
+          <dl className="facts">
+            <dt>Walls</dt>
+            <dd data-testid="wall-count">{walls.length}</dd>
+            <dt>Length</dt>
+            <dd data-testid="wall-length">{formatLength(total, units)}</dd>
+          </dl>
+          <p>
+            <button onClick={clearWalls}>Clear walls</button>
+          </p>
+        </>
       )}
     </section>
   )
