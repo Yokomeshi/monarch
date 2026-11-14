@@ -17,6 +17,7 @@ function drawL() {
 beforeEach(() => {
   useStore.setState({
     walls: [],
+    openings: [],
     draft: [],
     selectedWallId: null,
     selectedRoomId: null,
@@ -155,5 +156,44 @@ describe('rooms', () => {
     store().applyRoomToAll('room-b') // resets everything to the defaults
     store().loadProject(saved)
     expect(store().roomMaterials['room-a'].floor).toEqual(stone)
+  })
+})
+
+describe('openings', () => {
+  it('adds a door to a wall and reports when there is no room', () => {
+    const [a] = drawL() // 4 m long
+    expect(store().addOpening(a.id, 'door')).toBe(true)
+    expect(store().openings).toMatchObject([{ wallId: a.id, type: 'door', position: 2 }])
+    expect(store().addOpening(a.id, 'window')).toBe(true) // 1.45 m free on one side of the door
+    expect(store().addOpening(a.id, 'window')).toBe(true) // and on the other
+    expect(store().addOpening(a.id, 'window')).toBe(false)
+    expect(store().openings).toHaveLength(3)
+  })
+
+  it('deleting a wall removes its openings, and only its own', () => {
+    const [a, b] = drawL()
+    store().addOpening(a.id, 'door')
+    store().addOpening(b.id, 'window')
+    store().deleteWall(a.id)
+    expect(store().openings.map((o) => o.wallId)).toEqual([b.id])
+    store().removeOpenings(b.id)
+    expect(store().openings).toEqual([])
+  })
+
+  it('clearing the walls clears the openings', () => {
+    const [a] = drawL()
+    store().addOpening(a.id, 'door')
+    store().clearWalls()
+    expect(store().openings).toEqual([])
+  })
+
+  it('openings survive save and load', async () => {
+    const [a] = drawL()
+    store().addOpening(a.id, 'window')
+    const openings = store().openings
+    const saved = await store().saveProject()
+    store().clearWalls()
+    store().loadProject(saved)
+    expect(store().openings).toEqual(openings)
   })
 })

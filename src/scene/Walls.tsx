@@ -4,8 +4,9 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { Edges } from '@react-three/drei'
 import { useStore } from '../store'
 import { wallFootprints, type Footprint } from '../model/wallGeometry'
-import { prismData } from '../model/wallMesh'
-import type { Material } from '../model/materials'
+import { wallMeshData } from '../model/wallMesh'
+import type { Opening } from '../model/openings'
+import type { Wall } from '../model/walls'
 import { Surface } from './Surface'
 
 const MAX_CLICK_DRAG_PX = 4
@@ -16,16 +17,22 @@ export function Walls() {
   const selectedWallId = useStore((s) => s.selectedWallId)
   const selectable = useStore((s) => s.tool === 'none')
   const selectWall = useStore((s) => s.selectWall)
+  const openings = useStore((s) => s.openings)
   const footprints = useMemo(() => wallFootprints(walls), [walls])
+  const openingsByWall = useMemo(() => {
+    const map = new Map<string, Opening[]>()
+    for (const o of openings) map.set(o.wallId, [...(map.get(o.wallId) ?? []), o])
+    return map
+  }, [openings])
 
   return (
     <group>
       {walls.map((w) => (
         <WallMesh
           key={w.id}
+          wall={w}
           footprint={footprints.get(w.id)!}
-          height={w.height}
-          material={w.material}
+          openings={openingsByWall.get(w.id) ?? NO_OPENINGS}
           selected={w.id === selectedWallId}
           onSelect={selectable ? () => selectWall(w.id) : undefined}
         />
@@ -34,23 +41,25 @@ export function Walls() {
   )
 }
 
+const NO_OPENINGS: Opening[] = []
+
 interface WallMeshProps {
+  wall: Wall
   footprint: Footprint
-  height: number
-  material: Material
+  openings: Opening[]
   selected: boolean
   onSelect?: () => void
 }
 
-function WallMesh({ footprint, height, material, selected, onSelect }: WallMeshProps) {
+function WallMesh({ wall, footprint, openings, selected, onSelect }: WallMeshProps) {
   const geometry = useMemo(() => {
-    const { positions, uvs } = prismData(footprint, height)
+    const { positions, uvs } = wallMeshData(wall, footprint, openings)
     const g = new BufferGeometry()
     g.setAttribute('position', new Float32BufferAttribute(positions, 3))
     g.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
     g.computeVertexNormals()
     return g
-  }, [footprint, height])
+  }, [wall, footprint, openings])
   const onClick = onSelect
     ? (e: ThreeEvent<MouseEvent>) => {
         if (e.delta > MAX_CLICK_DRAG_PX) return
@@ -61,7 +70,7 @@ function WallMesh({ footprint, height, material, selected, onSelect }: WallMeshP
 
   return (
     <mesh geometry={geometry} castShadow receiveShadow onClick={onClick}>
-      <Surface material={material} />
+      <Surface material={wall.material} />
       {/* The selection outline leaves the surface colour untouched, so materials can be judged. */}
       {selected && <Edges color="#36c5f0" lineWidth={3} threshold={15} />}
     </mesh>
