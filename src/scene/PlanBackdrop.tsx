@@ -25,13 +25,14 @@ export function PlanBackdrop({ plan }: { plan: Plan }) {
   )
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if (!calibrating || e.delta > MAX_CLICK_DRAG_PX) return
+    if (e.delta > MAX_CLICK_DRAG_PX) return
     e.stopPropagation()
     addCalibrationPoint(worldToPixel({ x: e.point.x, z: e.point.z }, frame))
   }
 
+  // No handler unless calibrating, so a click on the plan counts as a click on empty space.
   return (
-    <mesh rotation-x={-Math.PI / 2} position-y={0.002} onClick={onClick}>
+    <mesh rotation-x={-Math.PI / 2} position-y={0.002} onClick={calibrating ? onClick : undefined}>
       <planeGeometry args={[width, depth]} />
       <meshBasicMaterial map={texture} toneMapped={false} />
     </mesh>
