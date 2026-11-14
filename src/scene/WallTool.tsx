@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, Line } from '@react-three/drei'
-import type { Camera, OrthographicCamera, PerspectiveCamera } from 'three'
 import { useStore } from '../store'
 import { constrainAngle, distance, endpoints, snapToPoint, type Vec2 } from '../model/walls'
 import { formatLength } from '../units'
+import { metresPerScreenPx, ScreenDot } from './ScreenDot'
 
 const MAX_CLICK_DRAG_PX = 4
 const SNAP_PX = 10
@@ -82,12 +82,12 @@ export function WallTool() {
 
       {draft.length > 1 && <Line points={draft.map(toV)} color={DRAFT_COLOR} lineWidth={2} />}
       {draft.map((p, i) => (
-        <Dot key={i} p={p} color={DRAFT_COLOR} />
+        <ScreenDot key={i} p={p} color={DRAFT_COLOR} />
       ))}
 
       {cursor && (
         <>
-          <Dot p={cursor.p} color={cursor.snapped ? '#3ddc84' : DRAFT_COLOR} radius={0.1} />
+          <ScreenDot p={cursor.p} color={cursor.snapped ? '#3ddc84' : DRAFT_COLOR} radiusPx={9} ring />
           {last && (
             <>
               <Line points={[toV(last), toV(cursor.p)]} color={DRAFT_COLOR} lineWidth={1} dashed dashSize={0.2} gapSize={0.1} />
@@ -100,21 +100,4 @@ export function WallTool() {
       )}
     </group>
   )
-}
-
-export function Dot({ p, color, radius = 0.06 }: { p: Vec2; color: string; radius?: number }) {
-  return (
-    <mesh position={[p.x, Y + 0.001, p.z]} rotation-x={-Math.PI / 2}>
-      <circleGeometry args={[radius, 20]} />
-      <meshBasicMaterial color={color} toneMapped={false} />
-    </mesh>
-  )
-}
-
-/** Approximate size of one screen pixel, in metres, at `dist` from the camera. */
-function metresPerScreenPx(camera: Camera, viewHeight: number, dist: number): number {
-  const ortho = camera as OrthographicCamera
-  if (ortho.isOrthographicCamera) return 1 / ortho.zoom
-  const persp = camera as PerspectiveCamera
-  return (2 * dist * Math.tan((persp.fov * Math.PI) / 360)) / viewHeight
 }

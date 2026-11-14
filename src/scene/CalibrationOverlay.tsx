@@ -2,6 +2,7 @@ import { Html, Line } from '@react-three/drei'
 import { useStore, type Plan } from '../store'
 import { pixelDistance, pixelToWorld, type Px } from '../plan/geometry'
 import { formatLength } from '../units'
+import { ScreenDot } from './ScreenDot'
 
 const Y = 0.01 // just above the plan
 
@@ -23,10 +24,7 @@ export function CalibrationOverlay({ plan }: { plan: Plan }) {
   return (
     <group>
       {shown.map((p, i) => (
-        <mesh key={i} position={toVec(p)} rotation-x={-Math.PI / 2}>
-          <circleGeometry args={[0.08, 24]} />
-          <meshBasicMaterial color={color} toneMapped={false} />
-        </mesh>
+        <ScreenDot key={i} p={pixelToWorld(p, plan)} color={color} />
       ))}
       {shown.length === 2 && (
         <>

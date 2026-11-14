@@ -1,5 +1,6 @@
 import {
-  calibrate, clickCorners, expect, fixture, planExtent, planInput, pressTool, setUnits, setView, test, topView, uploadPlan,
+  calibrate, clickCorners, colourAt, expect, fixture, planExtent, planInput, planToWorld, pressTool, setUnits, setView, test,
+  topView, uploadPlan,
 } from './helpers'
 
 test('upload a plan and calibrate it in Top view', async ({ app }) => {
@@ -57,4 +58,20 @@ test('replacing the plan keeps the walls and asks for calibration again', async 
   await expect(app.getByText('Not calibrated')).toBeVisible()
   await expect(app.getByTestId('wall-count')).toHaveText('1')
   await expect(app.getByTestId('wall-length')).toHaveText('4.000 m')
+})
+
+test('point markers stay small on screen however the plan is scaled', async ({ app }) => {
+  await uploadPlan(app)
+  await setView(app, 'Top')
+  await calibrate(app, '50 cm') // a tiny scale: the whole plan is 1 m wide
+  const scale = 0.5 / 500
+  const at = await topView(app, planExtent(scale))
+  const [x, z] = planToWorld(scale)(250, 400)
+  const marker = at(x, z)
+
+  const [r, , b] = await colourAt(app, marker)
+  expect(b, 'the marker is drawn at the point').toBeGreaterThan(r + 50)
+  // 14 px away diagonally the plan's white paper must show, not the marker.
+  const beside = await colourAt(app, { x: marker.x - 14, y: marker.y - 14 })
+  expect(Math.min(...beside), 'the plan is visible right beside the marker').toBeGreaterThan(200)
 })
