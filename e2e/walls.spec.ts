@@ -152,3 +152,26 @@ test('clicking the floor deselects, with and without a plan under it', async ({ 
   await click(app, at(0, 0))
   await expect(heading(app, 'New walls')).toBeVisible()
 })
+
+test('a wall drawn up to another wall snaps onto it, with or without the angle lock', async ({ app }) => {
+  await drawRoom(app)
+  const at = await topView(app)
+  const topWall = at(0, -2)
+  await pressTool(app, 'Draw walls')
+
+  // End 5 px short of the top wall: it snaps onto the wall, so the new wall is exactly 2 m.
+  await click(app, at(0, 0))
+  await click(app, { x: topWall.x, y: topWall.y + 5 })
+  await app.keyboard.press('Enter')
+  await expect(count(app)).toHaveText('5')
+  await expect(app.getByTestId('wall-length')).toHaveText('22.000 m')
+
+  // With Shift, a cursor that is off-axis and short still lands on the wall, straight up.
+  await click(app, at(1, 0))
+  await app.keyboard.down('Shift')
+  await click(app, { x: at(1, -2).x + 3, y: topWall.y + 5 })
+  await app.keyboard.up('Shift')
+  await app.keyboard.press('Enter')
+  await expect(count(app)).toHaveText('6')
+  await expect(app.getByTestId('wall-length')).toHaveText('24.000 m')
+})

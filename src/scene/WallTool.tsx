@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, Line } from '@react-three/drei'
 import { useStore } from '../store'
-import { constrainAngle, distance, endpoints, snapToPoint, type Vec2 } from '../model/walls'
+import {
+  constrainAngle, distance, endpoints, snapAlongRay, snapToPoint, snapToWall, type Vec2,
+} from '../model/walls'
 import { formatLength } from '../units'
 import { metresPerScreenPx, ScreenDot } from './ScreenDot'
 
@@ -47,7 +49,13 @@ export function WallTool() {
     const snap = snapToPoint(raw, [...endpoints(walls), ...draft], tolerance)
     if (snap) return { p: snap, snapped: true }
     const last = draft[draft.length - 1]
-    if (last && e.nativeEvent.shiftKey) return { p: constrainAngle(last, raw), snapped: false }
+    if (last && e.nativeEvent.shiftKey) {
+      const locked = constrainAngle(last, raw)
+      const onWall = snapAlongRay(last, locked, walls, tolerance)
+      return onWall ? { p: onWall, snapped: true } : { p: locked, snapped: false }
+    }
+    const onWall = snapToWall(raw, walls, tolerance)
+    if (onWall) return { p: onWall, snapped: true }
     return { p: raw, snapped: false }
   }
 

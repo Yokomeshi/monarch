@@ -56,6 +56,48 @@ export function snapToPoint(p: Vec2, candidates: Vec2[], tolerance: number): Vec
   return best
 }
 
+/** The point on segment a-b closest to p. */
+export function closestPointOnSegment(p: Vec2, a: Vec2, b: Vec2): Vec2 {
+  const dx = b.x - a.x
+  const dz = b.z - a.z
+  const len2 = dx * dx + dz * dz
+  if (len2 === 0) return a
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / len2))
+  return { x: a.x + t * dx, z: a.z + t * dz }
+}
+
+/** The nearest point on any wall's centreline within `tolerance` metres, or null. */
+export function snapToWall(p: Vec2, walls: Wall[], tolerance: number): Vec2 | null {
+  return snapToPoint(
+    p,
+    walls.map((w) => closestPointOnSegment(p, w.start, w.end)),
+    tolerance,
+  )
+}
+
+/**
+ * Where the line from `from` through `to` meets a wall centreline within `tolerance`
+ * of `to`, or null. Used with an angle lock: the wall ends on the other wall without
+ * leaving the locked direction.
+ */
+export function snapAlongRay(from: Vec2, to: Vec2, walls: Wall[], tolerance: number): Vec2 | null {
+  const dx = to.x - from.x
+  const dz = to.z - from.z
+  const hits: Vec2[] = []
+  for (const w of walls) {
+    const ex = w.end.x - w.start.x
+    const ez = w.end.z - w.start.z
+    const denom = dx * ez - dz * ex
+    if (Math.abs(denom) < 1e-12) continue // parallel
+    const qx = w.start.x - from.x
+    const qz = w.start.z - from.z
+    const s = (qx * ez - qz * ex) / denom // along the ray
+    const u = (qx * dz - qz * dx) / denom // along the wall
+    if (s > 0 && u >= 0 && u <= 1) hits.push({ x: from.x + s * dx, z: from.z + s * dz })
+  }
+  return snapToPoint(to, hits, tolerance)
+}
+
 /** Constrain the segment from -> to onto the nearest multiple of `stepDeg`, keeping its length. */
 export function constrainAngle(from: Vec2, to: Vec2, stepDeg = 45): Vec2 {
   const len = distance(from, to)

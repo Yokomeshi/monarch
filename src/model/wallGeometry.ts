@@ -1,7 +1,7 @@
 // Wall footprints on the ground plane, with mitred joins.
 // Pure functions: the 3D mesh is an extrusion of these footprints.
 
-import type { Vec2, Wall } from './walls'
+import { closestPointOnSegment, type Vec2, type Wall } from './walls'
 
 /** Corners in order: start-left, end-left, end-right, start-right (left of start -> end). */
 export type Footprint = [Vec2, Vec2, Vec2, Vec2]
@@ -30,8 +30,8 @@ export function wallFootprints(walls: Wall[]): Map<string, Footprint> {
 
   const result = new Map<string, Footprint>()
   for (const wall of walls) {
-    const s = endCorners(wall, true, nodes)
-    const e = endCorners(wall, false, nodes)
+    const s = endCorners(wall, true, nodes, walls)
+    const e = endCorners(wall, false, nodes, walls)
     // At the end node the outward direction is reversed, so its left is the wall's right.
     result.set(wall.id, [s.left, e.right, e.left, s.right])
   }
@@ -39,7 +39,12 @@ export function wallFootprints(walls: Wall[]): Map<string, Footprint> {
 }
 
 /** Left/right corners at one end, relative to the direction pointing away from that end. */
-function endCorners(wall: Wall, atStart: boolean, nodes: Map<string, End[]>): { left: Vec2; right: Vec2 } {
+function endCorners(
+  wall: Wall,
+  atStart: boolean,
+  nodes: Map<string, End[]>,
+  walls: Wall[],
+): { left: Vec2; right: Vec2 } {
   const p = atStart ? wall.start : wall.end
   const out = outward(wall, atStart)
   const half = wall.thickness / 2
@@ -47,6 +52,22 @@ function endCorners(wall: Wall, atStart: boolean, nodes: Map<string, End[]>): { 
   const square = { left: add(p, n, half), right: add(p, n, -half) }
 
   const others = (nodes.get(key(p)) ?? []).filter((e) => e.wall.id !== wall.id)
+  if (others.length === 0) {
+    // T-junction: this end lies partway along another wall. Cut it along that wall's near face.
+    const host = walls.find((w) => w.id !== wall.id && isOnSpan(p, w))
+    if (!host) return square
+    const h = outward(host, true)
+    const hN = leftNormal(h)
+    const side = Math.sign(out.x * hN.x + out.z * hN.z) // which face this wall approaches from
+    if (side === 0) return square
+    const face = add(p, hN, (side * host.thickness) / 2)
+    const left = intersect(add(p, n, half), out, face, h)
+    const right = intersect(add(p, n, -half), out, face, h)
+    if (!left || !right) return square
+    const limit = MITRE_LIMIT * Math.max(wall.thickness, host.thickness)
+    if (dist(left, p) > limit || dist(right, p) > limit) return square
+    return { left, right }
+  }
   if (others.length !== 1) return square
 
   const nb = others[0]
@@ -61,6 +82,12 @@ function endCorners(wall: Wall, atStart: boolean, nodes: Map<string, End[]>): { 
   const limit = MITRE_LIMIT * Math.max(wall.thickness, nb.wall.thickness)
   if (dist(left, p) > limit || dist(right, p) > limit) return square
   return { left, right }
+}
+
+/** True if p lies on the wall's centreline, away from both of its ends. */
+function isOnSpan(p: Vec2, wall: Wall): boolean {
+  if (dist(p, wall.start) < EPS || dist(p, wall.end) < EPS) return false
+  return dist(p, closestPointOnSegment(p, wall.start, wall.end)) < EPS
 }
 
 function outward(wall: Wall, atStart: boolean): Vec2 {

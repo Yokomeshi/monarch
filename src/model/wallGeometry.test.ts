@@ -84,4 +84,53 @@ describe('wallFootprints', () => {
     expectPoint(sl, p(-0.1, 0))
     expectPoint(sr, p(0.1, 0))
   })
+
+  describe('T-junctions: a wall ending partway along another', () => {
+    const host = () => createWall(p(0, 0), p(4, 0), props)
+
+    it('trims a perpendicular wall to the face of the wall it meets', () => {
+      const h = host()
+      const stem = createWall(p(2, 3), p(2, 0), props)
+      const [, endLeft, endRight] = wallFootprints([h, stem]).get(stem.id)!
+      for (const c of [endLeft, endRight]) expect(c.z).toBeCloseTo(0.1, 9)
+      expect(Math.abs(endLeft.x - endRight.x)).toBeCloseTo(t, 9)
+    })
+
+    it('works from either side and whichever end touches', () => {
+      const h = host()
+      const below = createWall(p(1, 0), p(1, -2), props) // starts on the host
+      const [startLeft, , , startRight] = wallFootprints([h, below]).get(below.id)!
+      for (const c of [startLeft, startRight]) expect(c.z).toBeCloseTo(-0.1, 9)
+    })
+
+    it('leaves the host wall whole, with no overlap between the two', () => {
+      const h = host()
+      const stem = createWall(p(2, 3), p(2, 0), props)
+      const fps = wallFootprints([h, stem])
+      expect(polygonArea(fps.get(h.id)!)).toBeCloseTo(4 * t, 9)
+      expect(polygonArea(fps.get(stem.id)!)).toBeCloseTo((3 - t / 2) * t, 9)
+    })
+
+    it('cuts an angled wall along the face, so both corners lie on it', () => {
+      const h = host()
+      const angled = createWall(p(4, 2), p(2, 0), props) // meets at 45 degrees
+      const [, endLeft, endRight] = wallFootprints([h, angled]).get(angled.id)!
+      for (const c of [endLeft, endRight]) expect(c.z).toBeCloseTo(0.1, 9)
+      expect(Math.abs(endLeft.x - endRight.x)).toBeCloseTo(t * Math.SQRT2, 9)
+    })
+
+    it('uses the thickness of the wall it meets', () => {
+      const thick = createWall(p(0, 0), p(4, 0), { height: 2.7, thickness: 0.5 })
+      const stem = createWall(p(2, 3), p(2, 0), props)
+      const [, endLeft] = wallFootprints([thick, stem]).get(stem.id)!
+      expect(endLeft.z).toBeCloseTo(0.25, 9)
+    })
+
+    it('does not treat a shared endpoint as a T-junction', () => {
+      const h = host()
+      const corner = createWall(p(4, 0), p(4, 3), props)
+      const [startLeft] = wallFootprints([h, corner]).get(corner.id)!
+      expectPoint(startLeft, p(3.9, 0.1)) // still a mitred L-corner
+    })
+  })
 })
