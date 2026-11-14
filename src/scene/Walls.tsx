@@ -5,6 +5,7 @@ import { Edges } from '@react-three/drei'
 import { useStore } from '../store'
 import { wallFootprints, type Footprint } from '../model/wallGeometry'
 import { wallMeshData } from '../model/wallMesh'
+import { CUT_HEIGHT, cutOpenings, cutWall } from '../model/cutaway'
 import type { Opening } from '../model/openings'
 import type { Vec2, Wall } from '../model/walls'
 import { Surface } from './Surface'
@@ -18,6 +19,7 @@ export function Walls() {
   const tool = useStore((s) => s.tool)
   const selectWall = useStore((s) => s.selectWall)
   const placeOpening = useStore((s) => s.placeOpening)
+  const cut = useStore((s) => (s.cutaway ? CUT_HEIGHT : null))
   const openings = useStore((s) => s.openings)
   const footprints = useMemo(() => wallFootprints(walls), [walls])
   const openingsByWall = useMemo(() => {
@@ -34,6 +36,7 @@ export function Walls() {
           wall={w}
           footprint={footprints.get(w.id)!}
           openings={openingsByWall.get(w.id) ?? NO_OPENINGS}
+          cut={cut}
           selected={w.id === selectedWallId}
           onPick={
             tool === 'none'
@@ -54,6 +57,8 @@ interface WallMeshProps {
   wall: Wall
   footprint: Footprint
   openings: Opening[]
+  /** In cutaway view, the height to draw the wall cut off at. */
+  cut: number | null
   selected: boolean
   /** Called with the clicked point, in world metres. */
   onPick?: (point: Vec2) => void
@@ -66,15 +71,17 @@ function distanceAlong(wall: Wall, point: Vec2): number {
   return ((point.x - wall.start.x) * dx + (point.z - wall.start.z) * dz) / Math.hypot(dx, dz)
 }
 
-function WallMesh({ wall, footprint, openings, selected, onPick }: WallMeshProps) {
+function WallMesh({ wall, footprint, openings, cut, selected, onPick }: WallMeshProps) {
   const geometry = useMemo(() => {
-    const { positions, uvs } = wallMeshData(wall, footprint, openings)
+    const { positions, uvs } = cut
+      ? wallMeshData(cutWall(wall, cut), footprint, cutOpenings(openings, cut))
+      : wallMeshData(wall, footprint, openings)
     const g = new BufferGeometry()
     g.setAttribute('position', new Float32BufferAttribute(positions, 3))
     g.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
     g.computeVertexNormals()
     return g
-  }, [wall, footprint, openings])
+  }, [wall, footprint, openings, cut])
   const onClick = onPick
     ? (e: ThreeEvent<MouseEvent>) => {
         if (e.delta > MAX_CLICK_DRAG_PX) return

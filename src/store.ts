@@ -71,6 +71,8 @@ interface State {
   roomMaterials: Record<string, RoomMaterials>
   showFloors: boolean
   showCeilings: boolean
+  /** Draw walls cut off low, so the rooms can be seen into. Display only. */
+  cutaway: boolean
   /** Uploaded photo textures, by id. */
   textures: Record<string, Texture>
   /** Corners of the wall chain being drawn, in world metres. */
@@ -121,6 +123,7 @@ interface State {
   applyRoomToAll: (id: string) => void
   setShowFloors: (show: boolean) => void
   setShowCeilings: (show: boolean) => void
+  setCutaway: (on: boolean) => void
   /** Load an image as a texture and return its id. */
   addTexture: (file: File) => Promise<string>
   /** The whole project as the text of a project file. */
@@ -168,6 +171,7 @@ export const useStore = create<State>()((set, get) => ({
   roomMaterials: {},
   showFloors: true,
   showCeilings: false,
+  cutaway: false,
   textures: {},
   draft: [],
 
@@ -339,6 +343,7 @@ export const useStore = create<State>()((set, get) => ({
 
   setShowFloors: (showFloors) => set({ showFloors }),
   setShowCeilings: (showCeilings) => set({ showCeilings }),
+  setCutaway: (cutaway) => set({ cutaway }),
 
   updateWall: (id, props) =>
     set((s) => ({ walls: s.walls.map((w) => (w.id === id ? { ...w, ...props } : w)) })),

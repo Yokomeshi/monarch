@@ -17,7 +17,8 @@ export function Rooms() {
   const rooms = useRooms()
   const walls = useStore((s) => s.walls)
   const showFloors = useStore((s) => s.showFloors)
-  const showCeilings = useStore((s) => s.showCeilings)
+  // A ceiling would cover the rooms that cutaway view opens up.
+  const showCeilings = useStore((s) => s.showCeilings && !s.cutaway)
   const roomMaterials = useStore((s) => s.roomMaterials)
   const roomDefaults = useStore((s) => s.roomDefaults)
   const selectedRoomId = useStore((s) => s.selectedRoomId)
