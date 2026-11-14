@@ -6,7 +6,7 @@ import { CameraRig } from './CameraRig'
 import { PlanBackdrop } from './PlanBackdrop'
 import { CalibrationOverlay } from './CalibrationOverlay'
 import { WallTool } from './WallTool'
-import { WallLines } from './WallLines'
+import { Walls } from './Walls'
 
 // World units are metres; Y is up. The ground plane is y = 0.
 export function Scene() {
@@ -17,8 +17,17 @@ export function Scene() {
     <Canvas shadows="percentage">
       <CameraRig />
       <color attach="background" args={['#1b1d21']} />
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[10, 15, 5]} intensity={1.5} castShadow />
+      <ambientLight intensity={0.6} />
+      <directionalLight
+        position={[10, 15, 5]}
+        intensity={1.5}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
+      />
       <Grid
         args={[50, 50]}
         cellSize={0.5}
@@ -35,7 +44,7 @@ export function Scene() {
           <CalibrationOverlay plan={plan} />
         </Suspense>
       )}
-      <WallLines />
+      <Walls />
       {tool === 'wall' && <WallTool />}
     </Canvas>
   )
