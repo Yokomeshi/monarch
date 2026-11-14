@@ -13,7 +13,6 @@ const DRAFT_COLOR = '#ffb020'
 
 /** Click-to-place wall drawing on the ground plane. */
 export function WallTool() {
-  const walls = useStore((s) => s.walls)
   const draft = useStore((s) => s.draft)
   const units = useStore((s) => s.units)
   const addDraftPoint = useStore((s) => s.addDraftPoint)
@@ -39,7 +38,10 @@ export function WallTool() {
     return () => window.removeEventListener('keydown', onKey)
   }, [finishDraft, removeDraftPoint, setTool])
 
+  // Handlers read the store directly: clicks can arrive faster than React re-renders,
+  // and a stale chain would lock angles and snap against the wrong points.
   const resolve = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    const { walls, draft } = useStore.getState()
     const raw = { x: e.point.x, z: e.point.z }
     const tolerance = SNAP_PX * metresPerScreenPx(camera, viewHeight, e.distance)
     const snap = snapToPoint(raw, [...endpoints(walls), ...draft], tolerance)
@@ -53,6 +55,7 @@ export function WallTool() {
     if (e.delta > MAX_CLICK_DRAG_PX) return
     e.stopPropagation()
     const { p } = resolve(e)
+    const { draft } = useStore.getState()
     const first = draft[0]
     const last = draft[draft.length - 1]
     if (draft.length > 2 && p === first) finishDraft(true)
@@ -88,7 +91,7 @@ export function WallTool() {
           {last && (
             <>
               <Line points={[toV(last), toV(cursor.p)]} color={DRAFT_COLOR} lineWidth={1} dashed dashSize={0.2} gapSize={0.1} />
-              <Html position={[(last.x + cursor.p.x) / 2, 0.3, (last.z + cursor.p.z) / 2]} center>
+              <Html position={[(last.x + cursor.p.x) / 2, 0.3, (last.z + cursor.p.z) / 2]} center style={{ pointerEvents: 'none' }}>
                 <div className="measure-label draft">{formatLength(distance(last, cursor.p), units)}</div>
               </Html>
             </>

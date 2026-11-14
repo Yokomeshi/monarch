@@ -32,7 +32,7 @@ export function CalibrationOverlay({ plan }: { plan: Plan }) {
         <>
           <Line points={[toVec(shown[0]), toVec(shown[1])]} color={color} lineWidth={2} />
           {!pending && (
-            <Html position={midpoint(toVec(shown[0]), toVec(shown[1]))} center>
+            <Html position={midpoint(toVec(shown[0]), toVec(shown[1]))} center style={{ pointerEvents: 'none' }}>
               <div className="measure-label">
                 {formatLength(pixelDistance(shown[0], shown[1]) * plan.metresPerPx, units)}
               </div>
