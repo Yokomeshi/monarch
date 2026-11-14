@@ -5,7 +5,7 @@ import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type W
 
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
-import { placeOpening, scaleOpenings, type Opening, type OpeningType } from './model/openings'
+import { editOpening, openingAt, scaleOpenings, type Opening } from './model/openings'
 
 export interface Texture {
   url: string
@@ -21,7 +21,7 @@ export interface Plan {
   calibrated: boolean
 }
 
-export type Tool = 'none' | 'calibrate' | 'wall'
+export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window'
 export type ViewMode = '3d' | 'top'
 
 // Before calibration the plan is shown 20 m wide so it fits the default view.
@@ -45,6 +45,9 @@ interface State {
   wallDefaults: WallProps
   selectedWallId: string | null
   selectedRoomId: string | null
+  selectedOpeningId: string | null
+  /** The last attempt to place a door or window found no room for it. */
+  placementFailed: boolean
   /** Floor and ceiling materials for rooms without their own. */
   roomDefaults: RoomMaterials
   /** Rooms whose materials differ from the defaults, by room id. */
@@ -73,9 +76,15 @@ interface State {
   deleteWall: (id: string) => void
   setWallDefaults: (props: Partial<WallProps>) => void
   applyDefaultsToAll: () => void
-  /** Add a standard door or window to the wall. False if the wall has no free stretch wide enough. */
-  addOpening: (wallId: string, type: OpeningType) => boolean
-  removeOpenings: (wallId: string) => void
+  /**
+   * With the door or window tool: place one on the wall at `position` metres from its
+   * start, then select it and end the tool. False if it doesn't fit there.
+   */
+  placeOpening: (wallId: string, position: number) => boolean
+  selectOpening: (id: string | null) => void
+  /** Change an opening. Ignored if the result would run into another opening. */
+  updateOpening: (id: string, patch: Partial<Opening>) => void
+  deleteOpening: (id: string) => void
   selectRoom: (id: string | null) => void
   setRoomMaterial: (id: string, part: keyof RoomMaterials, material: Material) => void
   /** Give every room this room's floor and ceiling. */
@@ -119,6 +128,8 @@ export const useStore = create<State>()((set, get) => ({
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
   selectedRoomId: null,
+  selectedOpeningId: null,
+  placementFailed: false,
   roomDefaults: { ...ROOM_DEFAULTS },
   roomMaterials: {},
   showFloors: true,
@@ -137,8 +148,10 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({
       tool,
       calibrationPoints: [],
+      placementFailed: false,
       selectedWallId: keep ? s.selectedWallId : null,
       selectedRoomId: keep ? s.selectedRoomId : null,
+      selectedOpeningId: keep ? s.selectedOpeningId : null,
     }))
   },
 
@@ -202,22 +215,47 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({ walls: [...s.walls, ...wallsFromChain(chain, s.wallDefaults)], draft: [] }))
   },
 
-  clearWalls: () => set({ walls: [], openings: [], draft: [], selectedWallId: null }),
+  clearWalls: () => set({ walls: [], openings: [], draft: [], selectedWallId: null, selectedOpeningId: null }),
 
-  selectWall: (selectedWallId) => set({ selectedWallId, selectedRoomId: null }),
+  selectWall: (selectedWallId) => set({ selectedWallId, selectedRoomId: null, selectedOpeningId: null }),
 
-  addOpening: (wallId, type) => {
-    const { walls, openings } = get()
+  placeOpening: (wallId, position) => {
+    const { walls, openings, tool } = get()
     const wall = walls.find((w) => w.id === wallId)
-    const opening = wall && placeOpening(wall, openings, type)
-    if (!opening) return false
-    set({ openings: [...openings, opening] })
+    if (!wall || (tool !== 'door' && tool !== 'window')) return false
+    const opening = openingAt(wall, openings, tool, position)
+    if (!opening) {
+      set({ placementFailed: true })
+      return false
+    }
+    set({
+      openings: [...openings, opening],
+      tool: 'none',
+      placementFailed: false,
+      selectedOpeningId: opening.id,
+      selectedWallId: null,
+      selectedRoomId: null,
+    })
     return true
   },
 
-  removeOpenings: (wallId) => set((s) => ({ openings: s.openings.filter((o) => o.wallId !== wallId) })),
+  selectOpening: (selectedOpeningId) => set({ selectedOpeningId, selectedWallId: null, selectedRoomId: null }),
 
-  selectRoom: (selectedRoomId) => set({ selectedRoomId, selectedWallId: null }),
+  updateOpening: (id, patch) => {
+    const { walls, openings } = get()
+    const opening = openings.find((o) => o.id === id)
+    const wall = opening && walls.find((w) => w.id === opening.wallId)
+    const edited = wall && editOpening(opening, patch, wall, openings)
+    if (edited) set({ openings: openings.map((o) => (o.id === id ? edited : o)) })
+  },
+
+  deleteOpening: (id) =>
+    set((s) => ({
+      openings: s.openings.filter((o) => o.id !== id),
+      selectedOpeningId: s.selectedOpeningId === id ? null : s.selectedOpeningId,
+    })),
+
+  selectRoom: (selectedRoomId) => set({ selectedRoomId, selectedWallId: null, selectedOpeningId: null }),
 
   setRoomMaterial: (id, part, material) =>
     set((s) => ({
@@ -237,6 +275,9 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({
       walls: s.walls.filter((w) => w.id !== id),
       openings: s.openings.filter((o) => o.wallId !== id),
+      selectedOpeningId: s.openings.some((o) => o.id === s.selectedOpeningId && o.wallId === id)
+        ? null
+        : s.selectedOpeningId,
       selectedWallId: s.selectedWallId === id ? null : s.selectedWallId,
     })),
 
@@ -313,6 +354,7 @@ export const useStore = create<State>()((set, get) => ({
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,
       selectedRoomId: null,
+      selectedOpeningId: null,
       textures: Object.fromEntries(
         Object.entries(file.textures).map(([id, t]) => [id, { url: t.image, name: t.name }]),
       ),

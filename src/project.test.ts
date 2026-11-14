@@ -26,7 +26,9 @@ function sample(): ProjectFile {
       image: IMG,
     },
     walls,
-    openings: [{ id: 'o1', wallId: walls[0].id, type: 'window', position: 2, width: 1.2, height: 1.2, sill: 0.9 }],
+    openings: [
+      { id: 'o1', wallId: walls[0].id, type: 'door', position: 2, width: 0.9, height: 2.1, sill: 0, hinge: 'end', swing: 'right' },
+    ],
     wallDefaults: WALL_DEFAULTS,
     rooms: {
       defaults: ROOM_DEFAULTS,
@@ -96,7 +98,18 @@ describe('parseProject', () => {
     expect(project.openings).toEqual([])
   })
 
+  it('opens a version 3 file, whose doors have no hinge or swing, with the defaults', () => {
+    const project = parse((d) => {
+      d.version = 3
+      delete d.openings[0].hinge
+      delete d.openings[0].swing
+    })()
+    expect(project.openings[0]).toMatchObject({ hinge: 'start', swing: 'left' })
+  })
+
   it.each([
+    ['an unknown hinge side', (d: any) => (d.openings[0].hinge = 'top')],
+    ['an unknown swing side', (d: any) => (d.openings[0].swing = 'up')],
     ['an opening on a wall that does not exist', (d: any) => (d.openings[0].wallId = 'nope')],
     ['an unknown opening type', (d: any) => (d.openings[0].type = 'portal')],
     ['a zero-width opening', (d: any) => (d.openings[0].width = 0)],

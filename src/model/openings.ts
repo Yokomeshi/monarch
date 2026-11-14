@@ -14,6 +14,10 @@ export interface Opening {
   height: number
   /** Height of the opening's bottom edge above the floor. 0 for a door. */
   sill: number
+  /** Doors only: which jamb the leaf hangs from, the one nearer the wall's start or its end. */
+  hinge: 'start' | 'end'
+  /** Doors only: which side of the wall the leaf opens to, seen looking from the wall's start to its end. */
+  swing: 'left' | 'right'
 }
 
 /** Openings stay this far from each end of the wall. */
@@ -33,29 +37,52 @@ export function fitOpening(o: Opening, length: number, height: number): Opening 
   return { ...o, width, position, sill, height: Math.min(o.height, height - sill) }
 }
 
+const overlap = (a: Opening, b: Opening) => Math.abs(a.position - b.position) < (a.width + b.width) / 2 - 1e-9
+
 /**
- * A standard door or window in the middle of the wall's largest free stretch,
- * or null if no stretch is wide enough.
+ * A standard door or window centred as near as it fits to `position` along the wall,
+ * or null if the wall is too small or the spot is taken by another opening.
  */
-export function placeOpening(wall: Wall, openings: Opening[], type: OpeningType): Opening | null {
+export function openingAt(wall: Wall, openings: Opening[], type: OpeningType, position: number): Opening | null {
   const length = wallLength(wall)
   const size = STANDARD[type]
   const height = Math.min(size.height, wall.height - size.sill)
-  if (height <= 0) return null
+  if (height <= 0 || length < size.width + 2 * EDGE_CLEARANCE) return null
+  const opening = fitOpening(
+    { id: crypto.randomUUID(), wallId: wall.id, type, position, ...size, height, hinge: 'start', swing: 'left' },
+    length,
+    wall.height,
+  )
+  const taken = openings.filter((o) => o.wallId === wall.id).map((o) => fitOpening(o, length, wall.height))
+  return taken.some((o) => overlap(o, opening)) ? null : opening
+}
 
-  const taken = openings
-    .filter((o) => o.wallId === wall.id)
-    .map((o) => fitOpening(o, length, wall.height))
-    .sort((a, b) => a.position - b.position)
-  let best: [number, number] | null = null
-  let from = EDGE_CLEARANCE
-  for (const edge of [...taken.map((o) => [o.position - o.width / 2, o.position + o.width / 2]), [length - EDGE_CLEARANCE, 0]]) {
-    const gap = edge[0] - from
-    if (gap >= size.width - 1e-9 && (!best || gap > best[1] - best[0] + 1e-9)) best = [from, edge[0]]
-    from = edge[1]
-  }
-  if (!best) return null
-  return { id: crypto.randomUUID(), wallId: wall.id, type, position: (best[0] + best[1]) / 2, ...size, height }
+/**
+ * The opening with `patch` applied and fitted to its wall, or null if that would
+ * run into another opening on the wall.
+ */
+export function editOpening(o: Opening, patch: Partial<Opening>, wall: Wall, openings: Opening[]): Opening | null {
+  const length = wallLength(wall)
+  const edited = fitOpening({ ...o, ...patch }, length, wall.height)
+  if (edited.width <= 0 || edited.height <= 0) return null
+  const others = openings
+    .filter((x) => x.wallId === wall.id && x.id !== o.id)
+    .map((x) => fitOpening(x, length, wall.height))
+  return others.some((x) => overlap(x, edited)) ? null : edited
+}
+
+/**
+ * The path of a door leaf's free edge from closed to open at 90 degrees, as `segments + 1`
+ * points. Local coordinates: x along the wall from the opening's centre, z towards the wall's left.
+ */
+export function swingArc(o: Opening, segments: number): { x: number; z: number }[] {
+  const hingeX = o.hinge === 'start' ? -o.width / 2 : o.width / 2
+  const towardsOtherJamb = -Math.sign(hingeX)
+  const side = o.swing === 'left' ? 1 : -1
+  return Array.from({ length: segments + 1 }, (_, k) => {
+    const a = (Math.PI / 2) * (k / segments)
+    return { x: hingeX + towardsOtherJamb * o.width * Math.cos(a), z: side * o.width * Math.sin(a) }
+  })
 }
 
 /** Scale openings along their walls, e.g. after recalibration. Heights are not part of the plan's scale. */

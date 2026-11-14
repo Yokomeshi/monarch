@@ -305,3 +305,19 @@ input.invalid {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.tool-door canvas,
+.tool-window canvas {
+  cursor: crosshair;
+}
+
+.door-sides {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  margin: 0 0 10px;
+}
+
+section > .row + .hint,
+section > button + .hint {
+  margin-top: 8px;
+}

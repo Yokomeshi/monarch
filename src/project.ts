@@ -6,9 +6,9 @@ import type { Opening } from './model/openings'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
-// Version 2 added room floor and ceiling materials; version 3 added openings.
-// Older files still open.
-export const PROJECT_VERSION = 3
+// Version 2 added room floor and ceiling materials, version 3 openings, and
+// version 4 door hinge and swing sides. Older files still open.
+export const PROJECT_VERSION = 4
 
 export interface ProjectFile {
   app: 'monarch'
@@ -104,7 +104,13 @@ function parseOpenings(list: unknown, wallIds: Set<string>): Opening[] {
     if (o.type !== 'door' && o.type !== 'window') throw invalid(`${label} type`)
     if (!isPositive(o.width) || !isPositive(o.height)) throw invalid(`${label} size`)
     if (!isFiniteNumber(o.position) || !isFiniteNumber(o.sill) || o.sill < 0) throw invalid(label)
-    return { id: o.id, wallId: o.wallId, type: o.type, position: o.position, width: o.width, height: o.height, sill: o.sill }
+    // Version 3 files have no hinge or swing.
+    const hinge = o.hinge ?? 'start'
+    const swing = o.swing ?? 'left'
+    if (hinge !== 'start' && hinge !== 'end') throw invalid(`${label} hinge`)
+    if (swing !== 'left' && swing !== 'right') throw invalid(`${label} swing`)
+    const { id, wallId, type, position, width, height, sill } = o
+    return { id, wallId, type, position, width, height, sill, hinge, swing }
   })
   if (new Set(openings.map((o) => o.id)).size !== openings.length) throw invalid('openings (duplicate ids)')
   return openings
