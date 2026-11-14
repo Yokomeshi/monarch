@@ -11,7 +11,7 @@ const H = 2.5
 function build(openings: Partial<Opening>[] = [], reversed = false) {
   const [a, b] = reversed ? [p(4, 0), p(0, 0)] : [p(0, 0), p(4, 0)]
   const w = createWall(a, b, { height: H, thickness: T })
-  const full = openings.map((o, i) => ({ id: `o${i}`, wallId: w.id, type: 'door' as const, position: 2, width: 0.9, height: 2.1, sill: 0, ...o }))
+  const full = openings.map((o, i) => ({ id: `o${i}`, wallId: w.id, type: 'door' as const, position: 2, width: 0.9, height: 2.1, sill: 0, hinge: 'start' as const, swing: 'left' as const, ...o }))
   return wallMeshData(w, wallFootprints([w]).get(w.id)!, full)
 }
 

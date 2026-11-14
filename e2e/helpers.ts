@@ -88,7 +88,10 @@ export async function setView(page: Page, view: '3D' | 'Top') {
 }
 
 /** Press a sidebar button that changes what clicks in the scene do, and let the scene catch up. */
-export async function pressTool(page: Page, name: 'Draw walls' | 'Done' | 'Calibrate scale') {
+export async function pressTool(
+  page: Page,
+  name: 'Draw walls' | 'Done' | 'Calibrate scale' | 'Place door' | 'Place window',
+) {
   await page.getByRole('button', { name }).click()
   await settle(page)
 }

@@ -6,7 +6,7 @@ import { useStore } from '../store'
 import { wallFootprints, type Footprint } from '../model/wallGeometry'
 import { wallMeshData } from '../model/wallMesh'
 import type { Opening } from '../model/openings'
-import type { Wall } from '../model/walls'
+import type { Vec2, Wall } from '../model/walls'
 import { Surface } from './Surface'
 
 const MAX_CLICK_DRAG_PX = 4
@@ -15,8 +15,9 @@ const MAX_CLICK_DRAG_PX = 4
 export function Walls() {
   const walls = useStore((s) => s.walls)
   const selectedWallId = useStore((s) => s.selectedWallId)
-  const selectable = useStore((s) => s.tool === 'none')
+  const tool = useStore((s) => s.tool)
   const selectWall = useStore((s) => s.selectWall)
+  const placeOpening = useStore((s) => s.placeOpening)
   const openings = useStore((s) => s.openings)
   const footprints = useMemo(() => wallFootprints(walls), [walls])
   const openingsByWall = useMemo(() => {
@@ -34,7 +35,13 @@ export function Walls() {
           footprint={footprints.get(w.id)!}
           openings={openingsByWall.get(w.id) ?? NO_OPENINGS}
           selected={w.id === selectedWallId}
-          onSelect={selectable ? () => selectWall(w.id) : undefined}
+          onPick={
+            tool === 'none'
+              ? () => selectWall(w.id)
+              : tool === 'door' || tool === 'window'
+                ? (point) => placeOpening(w.id, distanceAlong(w, point))
+                : undefined
+          }
         />
       ))}
     </group>
@@ -48,10 +55,18 @@ interface WallMeshProps {
   footprint: Footprint
   openings: Opening[]
   selected: boolean
-  onSelect?: () => void
+  /** Called with the clicked point, in world metres. */
+  onPick?: (point: Vec2) => void
 }
 
-function WallMesh({ wall, footprint, openings, selected, onSelect }: WallMeshProps) {
+/** How far along the wall's centreline a point is, from the wall's start. */
+function distanceAlong(wall: Wall, point: Vec2): number {
+  const dx = wall.end.x - wall.start.x
+  const dz = wall.end.z - wall.start.z
+  return ((point.x - wall.start.x) * dx + (point.z - wall.start.z) * dz) / Math.hypot(dx, dz)
+}
+
+function WallMesh({ wall, footprint, openings, selected, onPick }: WallMeshProps) {
   const geometry = useMemo(() => {
     const { positions, uvs } = wallMeshData(wall, footprint, openings)
     const g = new BufferGeometry()
@@ -60,11 +75,11 @@ function WallMesh({ wall, footprint, openings, selected, onSelect }: WallMeshPro
     g.computeVertexNormals()
     return g
   }, [wall, footprint, openings])
-  const onClick = onSelect
+  const onClick = onPick
     ? (e: ThreeEvent<MouseEvent>) => {
         if (e.delta > MAX_CLICK_DRAG_PX) return
         e.stopPropagation()
-        onSelect()
+        onPick({ x: e.point.x, z: e.point.z })
       }
     : undefined
 

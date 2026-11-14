@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { formatArea, formatLength, parseLength } from '../units'
 import { useRooms } from '../useRooms'
 import { RoomPanel } from './RoomPanel'
+import { OpeningPanel } from './OpeningPanel'
 import { wallLength } from '../model/walls'
 import { WallPanel } from './WallPanel'
 
@@ -78,6 +79,7 @@ export function Sidebar() {
 
       {plan && <CalibrationPanel />}
       <WallsPanel />
+      <OpeningsPanel />
       <RoomsPanel />
       <Inspector />
     </aside>
@@ -297,11 +299,55 @@ function RoomsPanel() {
   )
 }
 
-/** Edits the selected room, or else the selected wall or the new-wall defaults. */
+/** Edits the selected door or window, else the selected room, else the selected wall or the new-wall defaults. */
 function Inspector() {
   const rooms = useRooms()
   const selectedRoomId = useStore((s) => s.selectedRoomId)
+  const opening = useStore((s) => s.openings.find((o) => o.id === s.selectedOpeningId))
+  const wall = useStore((s) => s.walls.find((w) => w.id === opening?.wallId))
+  if (opening && wall) return <OpeningPanel opening={opening} wall={wall} />
   const i = rooms.findIndex((r) => r.id === selectedRoomId)
   if (i < 0) return <WallPanel />
   return <RoomPanel room={rooms[i]} name={`Room ${i + 1}`} hasOthers={rooms.length > 1} />
+}
+
+function OpeningsPanel() {
+  const hasWalls = useStore((s) => s.walls.length > 0)
+  const tool = useStore((s) => s.tool)
+  const failed = useStore((s) => s.placementFailed)
+  const doors = useStore((s) => s.openings.filter((o) => o.type === 'door').length)
+  const windows = useStore((s) => s.openings.length - doors)
+  const setTool = useStore((s) => s.setTool)
+  const placing = tool === 'door' || tool === 'window'
+
+  useEffect(() => {
+    if (!placing) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setTool('none')
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [placing, setTool])
+
+  if (!hasWalls) return null
+  return (
+    <section>
+      <h2>Doors and windows</h2>
+      {placing ? (
+        <>
+          <p className="hint">Click a wall to place the {tool}. Esc cancels.</p>
+          {failed && <p className="error">That spot is taken, or the wall is too small. Try another spot.</p>}
+          <button onClick={() => setTool('none')}>Cancel</button>
+        </>
+      ) : (
+        <div className="row">
+          <button onClick={() => setTool('door')}>Place door</button>
+          <button onClick={() => setTool('window')}>Place window</button>
+        </div>
+      )}
+      {doors + windows > 0 && (
+        <p className="hint" data-testid="opening-summary">
+          {doors} {doors === 1 ? 'door' : 'doors'}, {windows} {windows === 1 ? 'window' : 'windows'}
+        </p>
+      )}
+    </section>
+  )
 }

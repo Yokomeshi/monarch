@@ -21,6 +21,8 @@ beforeEach(() => {
     draft: [],
     selectedWallId: null,
     selectedRoomId: null,
+    selectedOpeningId: null,
+    placementFailed: false,
     wallDefaults: { ...WALL_DEFAULTS },
     roomDefaults: { ...ROOM_DEFAULTS },
     roomMaterials: {},
@@ -160,36 +162,87 @@ describe('rooms', () => {
 })
 
 describe('openings', () => {
-  it('adds a door to a wall and reports when there is no room', () => {
+  it('placing a door on a wall selects it and ends the tool', () => {
     const [a] = drawL() // 4 m long
-    expect(store().addOpening(a.id, 'door')).toBe(true)
-    expect(store().openings).toMatchObject([{ wallId: a.id, type: 'door', position: 2 }])
-    expect(store().addOpening(a.id, 'window')).toBe(true) // 1.45 m free on one side of the door
-    expect(store().addOpening(a.id, 'window')).toBe(true) // and on the other
-    expect(store().addOpening(a.id, 'window')).toBe(false)
-    expect(store().openings).toHaveLength(3)
+    store().setTool('door')
+    expect(store().placeOpening(a.id, 1.5)).toBe(true)
+    const [door] = store().openings
+    expect(door).toMatchObject({ wallId: a.id, type: 'door', position: 1.5 })
+    expect(store().selectedOpeningId).toBe(door.id)
+    expect(store().tool).toBe('none')
+  })
+
+  it('a spot that is taken is refused, keeps the tool, and flags the failure', () => {
+    const [a] = drawL()
+    store().setTool('door')
+    store().placeOpening(a.id, 1.5)
+    store().setTool('window')
+    expect(store().placeOpening(a.id, 1.7)).toBe(false)
+    expect(store().openings).toHaveLength(1)
+    expect(store().tool).toBe('window')
+    expect(store().placementFailed).toBe(true)
+    expect(store().placeOpening(a.id, 3.2)).toBe(true)
+    expect(store().placementFailed).toBe(false)
+  })
+
+  it('edits an opening within its limits and ignores a change that would overlap', () => {
+    const [a] = drawL()
+    store().setTool('door')
+    store().placeOpening(a.id, 1)
+    store().setTool('window')
+    store().placeOpening(a.id, 3)
+    const [door, window] = store().openings
+    store().updateOpening(door.id, { width: 1.2, hinge: 'end' })
+    expect(store().openings[0]).toMatchObject({ width: 1.2, hinge: 'end' })
+    store().updateOpening(door.id, { position: 2.5 }) // would run into the window
+    expect(store().openings[0].position).toBe(1)
+    store().updateOpening(window.id, { sill: 9 }) // above the wall: fitted
+    expect(store().openings[1].sill + store().openings[1].height).toBeLessThanOrEqual(a.height)
+  })
+
+  it('selecting an opening, a wall and a room replace each other', () => {
+    const [a] = drawL()
+    store().setTool('door')
+    store().placeOpening(a.id, 2)
+    const id = store().openings[0].id
+    store().selectWall(a.id)
+    expect(store().selectedOpeningId).toBeNull()
+    store().selectOpening(id)
+    expect(store().selectedWallId).toBeNull()
+    store().selectRoom('room-a')
+    expect(store().selectedOpeningId).toBeNull()
+  })
+
+  it('deleting an opening removes just that one and clears its selection', () => {
+    const [a] = drawL()
+    store().setTool('door')
+    store().placeOpening(a.id, 1)
+    store().setTool('window')
+    store().placeOpening(a.id, 3)
+    const [door, window] = store().openings
+    store().selectOpening(door.id)
+    store().deleteOpening(door.id)
+    expect(store().openings.map((o) => o.id)).toEqual([window.id])
+    expect(store().selectedOpeningId).toBeNull()
   })
 
   it('deleting a wall removes its openings, and only its own', () => {
     const [a, b] = drawL()
-    store().addOpening(a.id, 'door')
-    store().addOpening(b.id, 'window')
+    store().setTool('door')
+    store().placeOpening(a.id, 2)
+    store().setTool('window')
+    store().placeOpening(b.id, 1.5)
     store().deleteWall(a.id)
     expect(store().openings.map((o) => o.wallId)).toEqual([b.id])
-    store().removeOpenings(b.id)
-    expect(store().openings).toEqual([])
-  })
-
-  it('clearing the walls clears the openings', () => {
-    const [a] = drawL()
-    store().addOpening(a.id, 'door')
     store().clearWalls()
     expect(store().openings).toEqual([])
   })
 
   it('openings survive save and load', async () => {
     const [a] = drawL()
-    store().addOpening(a.id, 'window')
+    store().setTool('door')
+    store().placeOpening(a.id, 2)
+    store().updateOpening(store().openings[0].id, { hinge: 'end', swing: 'right' })
     const openings = store().openings
     const saved = await store().saveProject()
     store().clearWalls()
