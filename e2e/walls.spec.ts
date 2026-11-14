@@ -175,3 +175,28 @@ test('a wall drawn up to another wall snaps onto it, with or without the angle l
   await expect(count(app)).toHaveText('6')
   await expect(app.getByTestId('wall-length')).toHaveText('24.000 m')
 })
+
+test('closed rooms are listed with their areas, and a partition splits a room', async ({ app }) => {
+  await setView(app, 'Top')
+  const at = await topView(app)
+  await pressTool(app, 'Draw walls')
+  await clickCorners(app, [at(-3, -2), at(3, -2), at(3, 2)])
+  await app.keyboard.press('Enter')
+  await expect(app.getByText('No closed rooms yet.')).toBeVisible()
+
+  await clickCorners(app, [at(3, 2), at(-3, 2), at(-3, -2)])
+  await app.keyboard.press('Enter')
+  // 6 m x 4 m between centrelines, less a 0.15 m wall: 5.85 x 3.85.
+  await expect(app.getByTestId('rooms')).toHaveText('Room 122.52 m²')
+  await expect(app.locator('.room-label')).toHaveText('Room 122.52 m²')
+
+  await clickCorners(app, [at(-1, -2), at(-1, 2)])
+  await app.keyboard.press('Enter')
+  // 1.85 x 3.85 and 3.85 x 3.85. The total, 21.945 m², sits on a rounding boundary,
+  // so it is checked in square feet below instead.
+  await expect(app.getByTestId('rooms')).toHaveText(/^Room 17\.12 m²Room 214\.82 m²Total/)
+  await expect(app.locator('.room-label')).toHaveCount(2)
+
+  await setUnits(app, 'Imperial')
+  await expect(app.getByTestId('rooms-total')).toHaveText('236.2 sq ft')
+})
