@@ -25,6 +25,8 @@ export function Sidebar() {
     <aside className="sidebar">
       <h1>Monarch</h1>
 
+      <ProjectPanel />
+
       <section>
         <h2>Units</h2>
         <div className="segmented" role="radiogroup" aria-label="Units">
@@ -198,6 +200,63 @@ function WallsPanel() {
             <button onClick={clearWalls}>Clear walls</button>
           </p>
         </>
+      )}
+    </section>
+  )
+}
+
+function ProjectPanel() {
+  const saveProject = useStore((s) => s.saveProject)
+  const loadProject = useStore((s) => s.loadProject)
+  const [error, setError] = useState<string | null>(null)
+
+  const onSave = async () => {
+    setError(null)
+    try {
+      const url = URL.createObjectURL(new Blob([await saveProject()], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'monarch-project.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError("Couldn't save the project.")
+    }
+  }
+
+  const onOpen = async (file: File | undefined) => {
+    if (!file) return
+    setError(null)
+    try {
+      loadProject(await file.text())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't open the project.")
+    }
+  }
+
+  return (
+    <section>
+      <h2>Project</h2>
+      <div className="row">
+        <button onClick={onSave}>Save…</button>
+        <label className="button">
+          Open…
+          <input
+            type="file"
+            accept=".json,application/json"
+            hidden
+            data-testid="project-input"
+            onChange={(e) => {
+              onOpen(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+        </label>
+      </div>
+      {error && (
+        <p className="error" data-testid="project-error">
+          {error}
+        </p>
       )}
     </section>
   )

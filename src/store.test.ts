@@ -85,3 +85,30 @@ describe('wall editing', () => {
     expect(store().selectedWallId).toBeNull()
   })
 })
+
+describe('save and load', () => {
+  it('a saved project loads back with the same walls, defaults and units', async () => {
+    const [a] = drawL()
+    store().updateWall(a.id, { height: 3.2, material: applyPreset(DEFAULT_MATERIAL, PRESETS[3]) })
+    store().setWallDefaults({ thickness: 0.3 })
+    store().setUnits('imperial')
+    const saved = await store().saveProject()
+    const walls = store().walls
+
+    store().clearWalls()
+    store().setUnits('metric')
+    store().setWallDefaults({ thickness: 0.1 })
+    store().loadProject(saved)
+
+    expect(store().walls).toEqual(walls)
+    expect(store().wallDefaults.thickness).toBe(0.3)
+    expect(store().units).toBe('imperial')
+    expect(store().selectedWallId).toBeNull()
+  })
+
+  it('an invalid file throws and leaves the project untouched', () => {
+    const walls = drawL()
+    expect(() => store().loadProject('{"app":"other"}')).toThrow()
+    expect(store().walls).toEqual(walls)
+  })
+})
