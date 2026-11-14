@@ -3,6 +3,7 @@ import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from 
 import { DEFAULT_MATERIAL, ROOM_DEFAULTS } from './model/materials'
 import { createWall, WALL_DEFAULTS } from './model/walls'
 import { createModelObject, createObject } from './model/objects'
+import { DEFAULT_SUN } from './model/sun'
 
 const IMG = 'data:image/png;base64,AAAA'
 const MODEL = 'data:application/octet-stream;base64,AAAA'
@@ -36,6 +37,7 @@ function sample(): ProjectFile {
       createModelObject('m1', { width: 1, depth: 2, height: 3 }, p(0, 0)),
     ],
     models: { m1: { name: 'lamp.glb', format: 'glb', naturalSize: { width: 1, depth: 2, height: 3 }, data: MODEL } },
+    sun: { enabled: true, latitude: 51.5, day: 172, hour: 14.5, north: 30 },
     wallDefaults: WALL_DEFAULTS,
     rooms: {
       defaults: ROOM_DEFAULTS,
@@ -103,6 +105,25 @@ describe('parseProject', () => {
       delete d.openings
     })()
     expect(project.openings).toEqual([])
+  })
+
+  it('opens a version 6 file, which has no sun study, with the study off', () => {
+    const project = parse((d) => {
+      d.version = 6
+      delete d.sun
+    })()
+    expect(project.sun).toEqual(DEFAULT_SUN)
+    expect(project.sun.enabled).toBe(false)
+  })
+
+  it.each([
+    ['a latitude beyond the poles', (d: any) => (d.sun.latitude = 120)],
+    ['a day outside the year', (d: any) => (d.sun.day = 400)],
+    ['an hour outside the day', (d: any) => (d.sun.hour = -1)],
+    ['a non-numeric north', (d: any) => (d.sun.north = 'up')],
+    ['a sun switch that is not on or off', (d: any) => (d.sun.enabled = 'yes')],
+  ])('rejects %s', (_name, edit) => {
+    expect(parse(edit)).toThrow(/damaged/)
   })
 
   it('opens a version 5 file, which has no imported models', () => {

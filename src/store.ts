@@ -11,6 +11,7 @@ import {
   type PlacedObject,
 } from './model/objects'
 import { inspectModelFile } from './model3d'
+import { DEFAULT_SUN, type SunSettings } from './model/sun'
 
 export interface Texture {
   url: string
@@ -69,6 +70,8 @@ interface State {
   roomDefaults: RoomMaterials
   /** Rooms whose materials differ from the defaults, by room id. */
   roomMaterials: Record<string, RoomMaterials>
+  /** The sun study: where and when the sun is, for light and shadows. */
+  sun: SunSettings
   showFloors: boolean
   showCeilings: boolean
   /** Draw walls cut off low, so the rooms can be seen into. Display only. */
@@ -121,6 +124,7 @@ interface State {
   setRoomMaterial: (id: string, part: keyof RoomMaterials, material: Material) => void
   /** Give every room this room's floor and ceiling. */
   applyRoomToAll: (id: string) => void
+  setSun: (patch: Partial<SunSettings>) => void
   setShowFloors: (show: boolean) => void
   setShowCeilings: (show: boolean) => void
   setCutaway: (on: boolean) => void
@@ -169,6 +173,7 @@ export const useStore = create<State>()((set, get) => ({
   placementFailed: false,
   roomDefaults: { ...ROOM_DEFAULTS },
   roomMaterials: {},
+  sun: { ...DEFAULT_SUN },
   showFloors: true,
   showCeilings: false,
   cutaway: false,
@@ -341,6 +346,7 @@ export const useStore = create<State>()((set, get) => ({
   applyRoomToAll: (id) =>
     set((s) => ({ roomDefaults: s.roomMaterials[id] ?? s.roomDefaults, roomMaterials: {} })),
 
+  setSun: (patch) => set((s) => ({ sun: { ...s.sun, ...patch } })),
   setShowFloors: (showFloors) => set({ showFloors }),
   setShowCeilings: (showCeilings) => set({ showCeilings }),
   setCutaway: (cutaway) => set({ cutaway }),
@@ -379,7 +385,7 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   saveProject: async () => {
-    const { units, plan, calibrationLine, walls, openings, objects, wallDefaults, textures, roomDefaults, roomMaterials } =
+    const { units, plan, calibrationLine, walls, openings, objects, sun, wallDefaults, textures, roomDefaults, roomMaterials } =
       get()
     const rooms = { defaults: roomDefaults, materials: roomMaterials }
     const file: ProjectFile = {
@@ -399,6 +405,7 @@ export const useStore = create<State>()((set, get) => ({
       openings,
       objects,
       models: {},
+      sun,
       wallDefaults,
       rooms,
       textures: {},
@@ -439,6 +446,7 @@ export const useStore = create<State>()((set, get) => ({
         Object.entries(file.models).map(([id, { data, ...info }]) => [id, { ...info, url: data }]),
       ),
       placingModelId: null,
+      sun: file.sun,
       wallDefaults: file.wallDefaults,
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,
