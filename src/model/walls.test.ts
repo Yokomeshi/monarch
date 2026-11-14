@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  closestPointOnSegment,
   constrainAngle,
   createWall,
   endpoints,
   scaleWalls,
+  snapAlongRay,
   snapToPoint,
+  snapToWall,
   wallLength,
   wallsFromChain,
   WALL_DEFAULTS,
@@ -77,5 +80,33 @@ describe('scaleWalls', () => {
     expect(w.end).toEqual(p(1, 0.5))
     expect(w.height).toBe(WALL_DEFAULTS.height)
     expect(w.thickness).toBe(WALL_DEFAULTS.thickness)
+  })
+})
+
+describe('snapping to wall spans', () => {
+  const walls = [createWall(p(0, 0), p(4, 0)), createWall(p(4, 0), p(4, 3))]
+
+  it('finds the closest point on a segment, clamped to its ends', () => {
+    expect(closestPointOnSegment(p(1, 2), p(0, 0), p(4, 0))).toEqual(p(1, 0))
+    expect(closestPointOnSegment(p(-3, 1), p(0, 0), p(4, 0))).toEqual(p(0, 0))
+    expect(closestPointOnSegment(p(9, 1), p(0, 0), p(4, 0))).toEqual(p(4, 0))
+  })
+
+  it('snaps onto the nearest wall centreline within tolerance', () => {
+    expect(snapToWall(p(1.5, 0.08), walls, 0.1)).toEqual(p(1.5, 0))
+    expect(snapToWall(p(3.95, 2), walls, 0.1)).toEqual(p(4, 2))
+    expect(snapToWall(p(1.5, 0.5), walls, 0.1)).toBeNull()
+  })
+
+  it('with an angle lock, lands where the locked line meets the wall', () => {
+    // Drawing straight down from (1.5, -2); the cursor is a little short of the wall.
+    const hit = snapAlongRay(p(1.5, -2), p(1.5, -0.07), walls, 0.1)!
+    expect(hit.x).toBeCloseTo(1.5, 9)
+    expect(hit.z).toBeCloseTo(0, 9)
+    // A 45 degree line reaches the wall at a different x than the cursor's.
+    const diagonal = snapAlongRay(p(0, -2), p(1.95, -0.05), walls, 0.1)!
+    expect(diagonal.x).toBeCloseTo(2, 9)
+    expect(diagonal.z).toBeCloseTo(0, 9)
+    expect(snapAlongRay(p(1.5, -2), p(1.5, -1), walls, 0.1)).toBeNull()
   })
 })
