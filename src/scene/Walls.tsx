@@ -19,7 +19,8 @@ export function Walls() {
   const tool = useStore((s) => s.tool)
   const selectWall = useStore((s) => s.selectWall)
   const placeOpening = useStore((s) => s.placeOpening)
-  const cut = useStore((s) => (s.cutaway ? CUT_HEIGHT : null))
+  // Walking shows the walls at full height.
+  const cut = useStore((s) => (s.cutaway && s.tool !== 'walk' ? CUT_HEIGHT : null))
   const openings = useStore((s) => s.openings)
   const footprints = useMemo(() => wallFootprints(walls), [walls])
   const openingsByWall = useMemo(() => {

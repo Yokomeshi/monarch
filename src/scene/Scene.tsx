@@ -51,7 +51,8 @@ export function Scene() {
         fadeDistance={60}
         infiniteGrid
       />
-      <axesHelper args={[1]} />
+      {/* The origin marker is a drafting aid; it would stand in the middle of the room on a walk. */}
+      {tool !== 'walk' && <axesHelper args={[1]} />}
       {plan && (
         <Suspense fallback={null}>
           <PlanBackdrop key={plan.url} plan={plan} />

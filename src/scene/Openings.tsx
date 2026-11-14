@@ -19,7 +19,8 @@ export function Openings() {
   const selectedOpeningId = useStore((s) => s.selectedOpeningId)
   const selectable = useStore((s) => s.tool === 'none')
   const selectOpening = useStore((s) => s.selectOpening)
-  const cut = useStore((s) => (s.cutaway ? CUT_HEIGHT : null))
+  // Walking shows the walls at full height.
+  const cut = useStore((s) => (s.cutaway && s.tool !== 'walk' ? CUT_HEIGHT : null))
   const wallById = useMemo(() => new Map(walls.map((w) => [w.id, w])), [walls])
 
   return (

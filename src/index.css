@@ -353,3 +353,19 @@ section > button + .hint {
   margin: 0 6px 0 0;
   accent-color: var(--accent);
 }
+
+.tool-walk canvas {
+  cursor: grab;
+}
+
+.walk-help {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(13, 17, 23, 0.8);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  pointer-events: none;
+}

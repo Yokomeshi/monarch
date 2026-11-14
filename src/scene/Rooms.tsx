@@ -17,8 +17,9 @@ export function Rooms() {
   const rooms = useRooms()
   const walls = useStore((s) => s.walls)
   const showFloors = useStore((s) => s.showFloors)
-  // A ceiling would cover the rooms that cutaway view opens up.
-  const showCeilings = useStore((s) => s.showCeilings && !s.cutaway)
+  // Walking: ceilings always show. Otherwise they follow the toggle, but a ceiling would
+  // cover the rooms that cutaway view opens up.
+  const showCeilings = useStore((s) => s.tool === 'walk' || (s.showCeilings && !s.cutaway))
   const roomMaterials = useStore((s) => s.roomMaterials)
   const roomDefaults = useStore((s) => s.roomDefaults)
   const selectedRoomId = useStore((s) => s.selectedRoomId)
@@ -78,7 +79,7 @@ function Slab({ outline, y, facing, material, side, selected, onSelect }: SlabPr
     : undefined
 
   return (
-    <mesh geometry={geometry} receiveShadow onClick={onClick}>
+    <mesh geometry={geometry} receiveShadow onClick={onClick} userData={{ walkable: facing === 'up' }}>
       <Surface material={material} side={side} />
       {selected && <Edges color="#36c5f0" lineWidth={3} threshold={15} />}
     </mesh>

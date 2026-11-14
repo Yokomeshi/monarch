@@ -10,9 +10,19 @@ export function ViewToolbar() {
   const setShowCeilings = useStore((s) => s.setShowCeilings)
   const cutaway = useStore((s) => s.cutaway)
   const setCutaway = useStore((s) => s.setCutaway)
+  const walking = useStore((s) => s.tool === 'walk')
+  const setTool = useStore((s) => s.setTool)
 
   return (
     <div className="view-toolbar">
+      <button
+        aria-pressed={walking}
+        className={walking ? 'active' : ''}
+        title="Walk through the plan at eye height"
+        onClick={() => setTool(walking ? 'none' : 'walk')}
+      >
+        Walk
+      </button>
       <button
         aria-pressed={cutaway}
         className={cutaway ? 'active' : ''}
