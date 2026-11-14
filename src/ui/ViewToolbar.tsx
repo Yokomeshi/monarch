@@ -8,9 +8,19 @@ export function ViewToolbar() {
   const showCeilings = useStore((s) => s.showCeilings)
   const setShowFloors = useStore((s) => s.setShowFloors)
   const setShowCeilings = useStore((s) => s.setShowCeilings)
+  const cutaway = useStore((s) => s.cutaway)
+  const setCutaway = useStore((s) => s.setCutaway)
 
   return (
     <div className="view-toolbar">
+      <button
+        aria-pressed={cutaway}
+        className={cutaway ? 'active' : ''}
+        title="Cut the walls down to 1.2 m in the view, to see into the rooms"
+        onClick={() => setCutaway(!cutaway)}
+      >
+        Cutaway
+      </button>
       <button aria-pressed={showFloors} className={showFloors ? 'active' : ''} onClick={() => setShowFloors(!showFloors)}>
         Floors
       </button>
