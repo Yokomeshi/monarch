@@ -3,6 +3,8 @@ import type { Units } from './units'
 import { metresPerPixel, type Px } from './plan/geometry'
 import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type WallProps } from './model/walls'
 
+import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
+
 export interface Texture {
   url: string
   name: string
@@ -62,6 +64,26 @@ interface State {
   applyDefaultsToAll: () => void
   /** Load an image as a texture and return its id. */
   addTexture: (file: File) => Promise<string>
+  /** The whole project as the text of a project file. */
+  saveProject: () => Promise<string>
+  /** Replace the project with a saved one. Throws, changing nothing, if the file is invalid. */
+  loadProject: (text: string) => void
+}
+
+/** Image URLs are blob: URLs after an upload and data: URLs after opening a project. */
+async function toDataUrl(url: string): Promise<string> {
+  if (url.startsWith('data:')) return url
+  const blob = await (await fetch(url)).blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+function revoke(url: string) {
+  if (url.startsWith('blob:')) URL.revokeObjectURL(url)
 }
 
 export const useStore = create<State>()((set, get) => ({
@@ -178,5 +200,60 @@ export const useStore = create<State>()((set, get) => ({
     const id = crypto.randomUUID()
     set((s) => ({ textures: { ...s.textures, [id]: { url, name: file.name } } }))
     return id
+  },
+
+  saveProject: async () => {
+    const { units, plan, calibrationLine, walls, wallDefaults, textures } = get()
+    const file: ProjectFile = {
+      app: 'monarch',
+      version: PROJECT_VERSION,
+      units,
+      plan: plan && {
+        name: plan.name,
+        widthPx: plan.widthPx,
+        heightPx: plan.heightPx,
+        metresPerPx: plan.metresPerPx,
+        calibrated: plan.calibrated,
+        calibrationLine,
+        image: await toDataUrl(plan.url),
+      },
+      walls,
+      wallDefaults,
+      textures: {},
+    }
+    for (const id of usedTextureIds(walls, wallDefaults)) {
+      const t = textures[id]
+      if (t) file.textures[id] = { name: t.name, image: await toDataUrl(t.url) }
+    }
+    return JSON.stringify(file)
+  },
+
+  loadProject: (text) => {
+    const file = parseProject(text)
+    const old = get()
+    if (old.plan) revoke(old.plan.url)
+    Object.values(old.textures).forEach((t) => revoke(t.url))
+    set((s) => ({
+      units: file.units,
+      plan: file.plan && {
+        url: file.plan.image,
+        name: file.plan.name,
+        widthPx: file.plan.widthPx,
+        heightPx: file.plan.heightPx,
+        metresPerPx: file.plan.metresPerPx,
+        calibrated: file.plan.calibrated,
+      },
+      calibrationLine: file.plan?.calibrationLine ?? null,
+      calibrationPoints: [],
+      walls: file.walls,
+      wallDefaults: file.wallDefaults,
+      textures: Object.fromEntries(
+        Object.entries(file.textures).map(([id, t]) => [id, { url: t.image, name: t.name }]),
+      ),
+      selectedWallId: null,
+      draft: [],
+      tool: 'none',
+      frameRequest: s.frameRequest + 1,
+    }))
   },
 }))
