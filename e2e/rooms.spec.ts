@@ -81,7 +81,7 @@ test('floor and ceiling materials are saved and reopened', async ({ app }, testI
   const path = testInfo.outputPath('rooms.json')
   const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Save…' }).click()])
   await download.saveAs(path)
-  expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe(2)
+  expect(JSON.parse(readFileSync(path, 'utf8')).rooms.materials).not.toEqual({})
 
   await app.reload()
   await app.getByTestId('project-input').setInputFiles(path)

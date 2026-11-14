@@ -2,11 +2,13 @@
 
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import type { Wall, WallProps } from './model/walls'
+import type { Opening } from './model/openings'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
-// Version 2 added room floor and ceiling materials. Version 1 files still open.
-export const PROJECT_VERSION = 2
+// Version 2 added room floor and ceiling materials; version 3 added openings.
+// Older files still open.
+export const PROJECT_VERSION = 3
 
 export interface ProjectFile {
   app: 'monarch'
@@ -23,6 +25,7 @@ export interface ProjectFile {
     image: string
   } | null
   walls: Wall[]
+  openings: Opening[]
   wallDefaults: WallProps
   rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
@@ -77,7 +80,34 @@ export function parseProject(text: string): ProjectFile {
   const wallDefaults = parseWallProps(data.wallDefaults, 'wall defaults', textures)
 
   const rooms = parseRooms(data.rooms, textures)
-  return { app: 'monarch', version: data.version, units, plan: parsePlan(data.plan), walls, wallDefaults, rooms, textures }
+  const openings = parseOpenings(data.openings, new Set(walls.map((w) => w.id)))
+  return {
+    app: 'monarch',
+    version: data.version,
+    units,
+    plan: parsePlan(data.plan),
+    walls,
+    openings,
+    wallDefaults,
+    rooms,
+    textures,
+  }
+}
+
+function parseOpenings(list: unknown, wallIds: Set<string>): Opening[] {
+  if (list === undefined) return [] // version 1 or 2 file
+  if (!Array.isArray(list)) throw invalid('openings')
+  const openings = list.map((o, i): Opening => {
+    const label = `opening ${i + 1}`
+    if (!isObject(o) || typeof o.id !== 'string' || !o.id) throw invalid(label)
+    if (typeof o.wallId !== 'string' || !wallIds.has(o.wallId)) throw invalid(`${label} (its wall is missing)`)
+    if (o.type !== 'door' && o.type !== 'window') throw invalid(`${label} type`)
+    if (!isPositive(o.width) || !isPositive(o.height)) throw invalid(`${label} size`)
+    if (!isFiniteNumber(o.position) || !isFiniteNumber(o.sill) || o.sill < 0) throw invalid(label)
+    return { id: o.id, wallId: o.wallId, type: o.type, position: o.position, width: o.width, height: o.height, sill: o.sill }
+  })
+  if (new Set(openings.map((o) => o.id)).size !== openings.length) throw invalid('openings (duplicate ids)')
+  return openings
 }
 
 function parseRooms(r: unknown, textures: ProjectFile['textures']): RoomFinishes {

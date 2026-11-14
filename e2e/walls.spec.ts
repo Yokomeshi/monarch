@@ -1,5 +1,5 @@
 import {
-  calibrate, click, clickCorners, drawRoom, expect, field, planExtent, planToWorld, setUnits, setView, settle,
+  calibrate, click, clickCorners, colourAt, drawRoom, expect, field, planExtent, planToWorld, setUnits, setView, settle,
   test, topView, type, UNCALIBRATED, uploadPlan, view3d, pressTool
 } from './helpers'
 
@@ -201,4 +201,48 @@ test('closed rooms are listed with their areas, and a partition splits a room', 
 
   await setUnits(app, 'Imperial')
   await expect(app.getByTestId('rooms-total')).toHaveText('236.2 sq ft')
+})
+
+test('doors and windows cut real holes in a wall, and are saved', async ({ app }, testInfo) => {
+  await drawRoom(app)
+  await setView(app, '3D')
+  const at = await view3d(app)
+  // The x = +3 wall runs from z = -2 to 2. Its first opening is centred, at z = 0.
+  const face = at(3.075, 1, 0)
+  const wallBeside = at(3.075, 1, 1.2)
+
+  await click(app, face)
+  await expect(heading(app, 'Selected wall')).toBeVisible()
+  let [r, , b] = await colourAt(app, face)
+  expect(Math.abs(r - b), 'solid painted wall').toBeLessThan(40)
+
+  await app.getByRole('button', { name: 'Add door' }).click()
+  await expect(app.getByTestId('opening-count')).toHaveText('1 opening')
+  ;[r, , b] = await colourAt(app, face)
+  expect(r, 'through the doorway, the wood floor inside shows').toBeGreaterThan(b + 30)
+  ;[r, , b] = await colourAt(app, wallBeside)
+  expect(Math.abs(r - b), 'the wall beside the door is still there').toBeLessThan(40)
+
+  // A 4 m wall takes a door and a window either side, then is full.
+  await app.getByRole('button', { name: 'Add window' }).click()
+  await app.getByRole('button', { name: 'Add window' }).click()
+  await expect(app.getByTestId('opening-count')).toHaveText('3 openings')
+  await app.getByRole('button', { name: 'Add window' }).click()
+  await expect(app.getByText('No free stretch of this wall is wide enough.')).toBeVisible()
+
+  const path = testInfo.outputPath('openings.json')
+  const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Save…' }).click()])
+  await download.saveAs(path)
+  await app.reload()
+  await app.getByTestId('project-input').setInputFiles(path)
+  await expect(count(app)).toHaveText('4')
+  await settle(app) // let the reopened scene render before clicking in it
+  // A window now sits at z = 1.2 between 0.9 m and 2.1 m up, so select the wall below its sill.
+  await click(app, at(3.075, 0.4, 1.2))
+  await expect(app.getByTestId('opening-count')).toHaveText('3 openings')
+
+  await app.getByRole('button', { name: 'Remove all' }).click()
+  await expect(app.getByTestId('opening-count')).toHaveCount(0)
+  ;[r, , b] = await colourAt(app, face)
+  expect(Math.abs(r - b), 'the wall is solid again').toBeLessThan(40)
 })

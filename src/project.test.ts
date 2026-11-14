@@ -8,6 +8,10 @@ const p = (x: number, z: number) => ({ x, z })
 
 function sample(): ProjectFile {
   const textured = { ...DEFAULT_MATERIAL, textureId: 'tex1', tileSize: 0.5, color: '#ffffff' }
+  const walls = [
+    createWall(p(0, 0), p(4, 0), { height: 3, thickness: 0.2, material: textured }),
+    createWall(p(4, 0), p(4, 3)),
+  ]
   return {
     app: 'monarch',
     version: PROJECT_VERSION,
@@ -21,10 +25,8 @@ function sample(): ProjectFile {
       calibrationLine: [{ x: 250, y: 400 }, { x: 750, y: 400 }],
       image: IMG,
     },
-    walls: [
-      createWall(p(0, 0), p(4, 0), { height: 3, thickness: 0.2, material: textured }),
-      createWall(p(4, 0), p(4, 3)),
-    ],
+    walls,
+    openings: [{ id: 'o1', wallId: walls[0].id, type: 'window', position: 2, width: 1.2, height: 1.2, sill: 0.9 }],
     wallDefaults: WALL_DEFAULTS,
     rooms: {
       defaults: ROOM_DEFAULTS,
@@ -47,7 +49,7 @@ describe('parseProject', () => {
   })
 
   it('accepts a project with no plan, walls or textures', () => {
-    const empty = { ...sample(), plan: null, walls: [], textures: {}, rooms: { defaults: ROOM_DEFAULTS, materials: {} } }
+    const empty = { ...sample(), plan: null, walls: [], openings: [], textures: {}, rooms: { defaults: ROOM_DEFAULTS, materials: {} } }
     expect(parseProject(JSON.stringify(empty))).toEqual(empty)
   })
 
@@ -84,6 +86,25 @@ describe('parseProject', () => {
     })()
     expect(project.rooms).toEqual({ defaults: ROOM_DEFAULTS, materials: {} })
     expect(project.walls).toHaveLength(2)
+  })
+
+  it('opens a version 2 file, which has no openings', () => {
+    const project = parse((d) => {
+      d.version = 2
+      delete d.openings
+    })()
+    expect(project.openings).toEqual([])
+  })
+
+  it.each([
+    ['an opening on a wall that does not exist', (d: any) => (d.openings[0].wallId = 'nope')],
+    ['an unknown opening type', (d: any) => (d.openings[0].type = 'portal')],
+    ['a zero-width opening', (d: any) => (d.openings[0].width = 0)],
+    ['a negative sill', (d: any) => (d.openings[0].sill = -1)],
+    ['a non-numeric position', (d: any) => (d.openings[0].position = 'middle')],
+    ['duplicate opening ids', (d: any) => d.openings.push({ ...d.openings[0] })],
+  ])('rejects %s', (_name, edit) => {
+    expect(parse(edit)).toThrow(/damaged/)
   })
 
   it('rejects a damaged room material', () => {

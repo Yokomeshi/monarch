@@ -5,6 +5,7 @@ import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type W
 
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
+import { placeOpening, scaleOpenings, type Opening, type OpeningType } from './model/openings'
 
 export interface Texture {
   url: string
@@ -38,6 +39,8 @@ interface State {
   /** The span the current scale was set from, kept on screen as a check. */
   calibrationLine: [Px, Px] | null
   walls: Wall[]
+  /** Doors and windows, each attached to a wall. */
+  openings: Opening[]
   /** Height and thickness given to newly drawn walls. */
   wallDefaults: WallProps
   selectedWallId: string | null
@@ -70,6 +73,9 @@ interface State {
   deleteWall: (id: string) => void
   setWallDefaults: (props: Partial<WallProps>) => void
   applyDefaultsToAll: () => void
+  /** Add a standard door or window to the wall. False if the wall has no free stretch wide enough. */
+  addOpening: (wallId: string, type: OpeningType) => boolean
+  removeOpenings: (wallId: string) => void
   selectRoom: (id: string | null) => void
   setRoomMaterial: (id: string, part: keyof RoomMaterials, material: Material) => void
   /** Give every room this room's floor and ceiling. */
@@ -109,6 +115,7 @@ export const useStore = create<State>()((set, get) => ({
   calibrationPoints: [],
   calibrationLine: null,
   walls: [],
+  openings: [],
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
   selectedRoomId: null,
@@ -178,6 +185,7 @@ export const useStore = create<State>()((set, get) => ({
       plan: { ...plan, metresPerPx: newScale, calibrated: true },
       // Walls traced over the plan stay on the drawing.
       walls: scaleWalls(walls, newScale / plan.metresPerPx),
+      openings: scaleOpenings(s.openings, newScale / plan.metresPerPx),
       tool: 'none',
       calibrationPoints: [],
       calibrationLine: [a, b],
@@ -194,9 +202,20 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({ walls: [...s.walls, ...wallsFromChain(chain, s.wallDefaults)], draft: [] }))
   },
 
-  clearWalls: () => set({ walls: [], draft: [], selectedWallId: null }),
+  clearWalls: () => set({ walls: [], openings: [], draft: [], selectedWallId: null }),
 
   selectWall: (selectedWallId) => set({ selectedWallId, selectedRoomId: null }),
+
+  addOpening: (wallId, type) => {
+    const { walls, openings } = get()
+    const wall = walls.find((w) => w.id === wallId)
+    const opening = wall && placeOpening(wall, openings, type)
+    if (!opening) return false
+    set({ openings: [...openings, opening] })
+    return true
+  },
+
+  removeOpenings: (wallId) => set((s) => ({ openings: s.openings.filter((o) => o.wallId !== wallId) })),
 
   selectRoom: (selectedRoomId) => set({ selectedRoomId, selectedWallId: null }),
 
@@ -217,6 +236,7 @@ export const useStore = create<State>()((set, get) => ({
   deleteWall: (id) =>
     set((s) => ({
       walls: s.walls.filter((w) => w.id !== id),
+      openings: s.openings.filter((o) => o.wallId !== id),
       selectedWallId: s.selectedWallId === id ? null : s.selectedWallId,
     })),
 
@@ -241,7 +261,8 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   saveProject: async () => {
-    const { units, plan, calibrationLine, walls, wallDefaults, textures, roomDefaults, roomMaterials } = get()
+    const { units, plan, calibrationLine, walls, openings, wallDefaults, textures, roomDefaults, roomMaterials } =
+      get()
     const rooms = { defaults: roomDefaults, materials: roomMaterials }
     const file: ProjectFile = {
       app: 'monarch',
@@ -257,6 +278,7 @@ export const useStore = create<State>()((set, get) => ({
         image: await toDataUrl(plan.url),
       },
       walls,
+      openings,
       wallDefaults,
       rooms,
       textures: {},
@@ -286,6 +308,7 @@ export const useStore = create<State>()((set, get) => ({
       calibrationLine: file.plan?.calibrationLine ?? null,
       calibrationPoints: [],
       walls: file.walls,
+      openings: file.openings,
       wallDefaults: file.wallDefaults,
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,

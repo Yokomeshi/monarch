@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { wallLength } from '../model/walls'
 import { formatLength } from '../units'
@@ -61,6 +61,7 @@ export function WallPanel() {
             <dt>Length</dt>
             <dd data-testid="selected-length">{formatLength(wallLength(wall), units)}</dd>
           </dl>
+          <Openings wallId={wall.id} />
           <p>
             <button onClick={() => deleteWall(wall.id)}>Delete wall</button>
           </p>
@@ -69,5 +70,33 @@ export function WallPanel() {
         wallCount > 0 && <button onClick={applyDefaultsToAll}>Apply to all walls</button>
       )}
     </section>
+  )
+}
+
+/** Add standard doors and windows to the selected wall. */
+function Openings({ wallId }: { wallId: string }) {
+  const count = useStore((s) => s.openings.filter((o) => o.wallId === wallId).length)
+  const addOpening = useStore((s) => s.addOpening)
+  const removeOpenings = useStore((s) => s.removeOpenings)
+  const [full, setFull] = useState(false)
+  useEffect(() => setFull(false), [wallId, count])
+
+  return (
+    <div className="material-controls">
+      <h3>Doors and windows</h3>
+      <div className="row">
+        <button onClick={() => setFull(!addOpening(wallId, 'door'))}>Add door</button>
+        <button onClick={() => setFull(!addOpening(wallId, 'window'))}>Add window</button>
+      </div>
+      {full && <p className="error">No free stretch of this wall is wide enough.</p>}
+      {count > 0 && (
+        <div className="row">
+          <span data-testid="opening-count">
+            {count} {count === 1 ? 'opening' : 'openings'}
+          </span>
+          <button onClick={() => removeOpenings(wallId)}>Remove all</button>
+        </div>
+      )}
+    </div>
   )
 }
