@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useStore } from '../store'
-import { formatLength, parseLength } from '../units'
+import { formatArea, formatLength, parseLength } from '../units'
+import { detectRooms } from '../model/rooms'
 import { wallLength } from '../model/walls'
 import { WallPanel } from './WallPanel'
 
@@ -76,6 +77,7 @@ export function Sidebar() {
 
       {plan && <CalibrationPanel />}
       <WallsPanel />
+      <RoomsPanel />
       <WallPanel />
     </aside>
   )
@@ -257,6 +259,38 @@ function ProjectPanel() {
         <p className="error" data-testid="project-error">
           {error}
         </p>
+      )}
+    </section>
+  )
+}
+
+function RoomsPanel() {
+  const units = useStore((s) => s.units)
+  const walls = useStore((s) => s.walls)
+  const rooms = useMemo(() => detectRooms(walls), [walls])
+  if (walls.length === 0) return null
+  const total = rooms.reduce((sum, r) => sum + r.area, 0)
+
+  return (
+    <section>
+      <h2>Rooms</h2>
+      {rooms.length === 0 ? (
+        <p className="hint">No closed rooms yet. A room appears when walls form a closed loop.</p>
+      ) : (
+        <dl className="facts" data-testid="rooms">
+          {rooms.map((room, i) => (
+            <Fragment key={room.id}>
+              <dt>Room {i + 1}</dt>
+              <dd>{formatArea(room.area, units)}</dd>
+            </Fragment>
+          ))}
+          {rooms.length > 1 && (
+            <>
+              <dt>Total</dt>
+              <dd data-testid="rooms-total">{formatArea(total, units)}</dd>
+            </>
+          )}
+        </dl>
       )}
     </section>
   )

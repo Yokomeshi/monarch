@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatLength, parseLength } from './units'
+import { formatArea, formatLength, parseLength } from './units'
 
 describe('formatLength', () => {
   it('formats metric to the millimetre', () => {
@@ -54,5 +54,15 @@ describe('parseLength', () => {
   it('round-trips through formatLength', () => {
     const m = parseLength(formatLength(4.2672, 'imperial'), 'imperial')!
     expect(m).toBeCloseTo(4.2672, 3)
+  })
+})
+
+describe('formatArea', () => {
+  it('formats square metres', () => {
+    expect(formatArea(22.5225, 'metric')).toBe('22.52 m²')
+  })
+
+  it('formats square feet', () => {
+    expect(formatArea(0.09290304 * 250, 'imperial')).toBe('250.0 sq ft')
   })
 })
