@@ -1,12 +1,15 @@
-import { useMemo } from 'react'
-import { BufferGeometry, Float32BufferAttribute } from 'three'
-import type { ThreeEvent } from '@react-three/fiber'
+import { Suspense, useMemo } from 'react'
+import { BufferGeometry, Float32BufferAttribute, RepeatWrapping, SRGBColorSpace, TextureLoader } from 'three'
+import { useLoader, type ThreeEvent } from '@react-three/fiber'
+import { Edges } from '@react-three/drei'
 import { useStore } from '../store'
 import { wallFootprints, type Footprint } from '../model/wallGeometry'
+import { prismData } from '../model/wallMesh'
+import type { Material } from '../model/materials'
 
 const MAX_CLICK_DRAG_PX = 4
 
-/** Extruded walls. Geometry is rebuilt from the wall data whenever it changes. */
+/** Extruded walls. Geometry and materials are rebuilt from the wall data whenever it changes. */
 export function Walls() {
   const walls = useStore((s) => s.walls)
   const selectedWallId = useStore((s) => s.selectedWallId)
@@ -21,6 +24,7 @@ export function Walls() {
           key={w.id}
           footprint={footprints.get(w.id)!}
           height={w.height}
+          material={w.material}
           selected={w.id === selectedWallId}
           onSelect={selectable ? () => selectWall(w.id) : undefined}
         />
@@ -32,12 +36,22 @@ export function Walls() {
 interface WallMeshProps {
   footprint: Footprint
   height: number
+  material: Material
   selected: boolean
   onSelect?: () => void
 }
 
-function WallMesh({ footprint, height, selected, onSelect }: WallMeshProps) {
-  const geometry = useMemo(() => prism(footprint, height), [footprint, height])
+function WallMesh({ footprint, height, material, selected, onSelect }: WallMeshProps) {
+  const geometry = useMemo(() => {
+    const { positions, uvs } = prismData(footprint, height)
+    const g = new BufferGeometry()
+    g.setAttribute('position', new Float32BufferAttribute(positions, 3))
+    g.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+    g.computeVertexNormals()
+    return g
+  }, [footprint, height])
+  const textureUrl = useStore((s) => (material.textureId ? s.textures[material.textureId]?.url : undefined))
+
   const onClick = onSelect
     ? (e: ThreeEvent<MouseEvent>) => {
         if (e.delta > MAX_CLICK_DRAG_PX) return
@@ -46,41 +60,51 @@ function WallMesh({ footprint, height, selected, onSelect }: WallMeshProps) {
       }
     : undefined
 
+  const plain = <SurfaceMaterial material={material} />
   return (
     <mesh geometry={geometry} castShadow receiveShadow onClick={onClick}>
-      <meshStandardMaterial
-        color={selected ? '#7fd8f5' : '#e8e4dc'}
-        emissive={selected ? '#0b4a63' : '#000000'}
-        roughness={0.9}
-      />
+      {textureUrl ? (
+        // Show the plain colour while the photo loads.
+        <Suspense fallback={plain}>
+          <SurfaceMaterial material={material} textureUrl={textureUrl} />
+        </Suspense>
+      ) : (
+        plain
+      )}
+      {/* The selection outline leaves the surface colour untouched, so materials can be judged. */}
+      {selected && <Edges color="#36c5f0" lineWidth={3} threshold={15} />}
     </mesh>
   )
 }
 
-/** A flat-shaded prism: the footprint extruded from y = 0 to y = height. */
-function prism(footprint: Footprint, height: number): BufferGeometry {
-  // Order the corners so the top face's normal points up.
-  let q = footprint.map((p) => [p.x, p.z] as const)
-  const shoelace = q.reduce((s, [x, z], i) => {
-    const [nx, nz] = q[(i + 1) % q.length]
-    return s + x * nz - nx * z
-  }, 0)
-  if (shoelace > 0) q = [...q].reverse()
+function SurfaceMaterial({ material, textureUrl }: { material: Material; textureUrl?: string }) {
+  return textureUrl ? (
+    <TexturedMaterial material={material} textureUrl={textureUrl} />
+  ) : (
+    <meshStandardMaterial color={material.color} roughness={material.roughness} metalness={material.metalness} />
+  )
+}
 
-  const v: number[] = []
-  const tri = (...pts: (readonly [number, number, number])[]) => pts.forEach((p) => v.push(...p))
-  const top = q.map(([x, z]) => [x, height, z] as const)
-  const bottom = q.map(([x, z]) => [x, 0, z] as const)
+function TexturedMaterial({ material, textureUrl }: { material: Material; textureUrl: string }) {
+  const base = useLoader(TextureLoader, textureUrl)
+  // UVs are in metres, so repeating every `tileSize` metres is a 1 / tileSize scale.
+  // Cloned per wall: walls sharing a photo can have different tile sizes.
+  const map = useMemo(() => {
+    const t = base.clone()
+    t.wrapS = t.wrapT = RepeatWrapping
+    t.colorSpace = SRGBColorSpace
+    t.repeat.set(1 / material.tileSize, 1 / material.tileSize)
+    t.needsUpdate = true
+    return t
+  }, [base, material.tileSize])
 
-  tri(top[0], top[1], top[2], top[0], top[2], top[3])
-  tri(bottom[0], bottom[2], bottom[1], bottom[0], bottom[3], bottom[2])
-  for (let i = 0; i < 4; i++) {
-    const j = (i + 1) % 4
-    tri(bottom[i], bottom[j], top[j], bottom[i], top[j], top[i])
-  }
-
-  const geometry = new BufferGeometry()
-  geometry.setAttribute('position', new Float32BufferAttribute(v, 3))
-  geometry.computeVertexNormals()
-  return geometry
+  return (
+    <meshStandardMaterial
+      key={map.uuid}
+      map={map}
+      color={material.color}
+      roughness={material.roughness}
+      metalness={material.metalness}
+    />
+  )
 }

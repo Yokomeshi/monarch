@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { wallLength } from '../model/walls'
 import { formatLength } from '../units'
 import { LengthControl, type LengthRange } from './LengthControl'
+import { MaterialControls } from './MaterialControls'
 
 const INCH = 0.0254
 const FOOT = 0.3048
@@ -53,6 +54,7 @@ export function WallPanel() {
         range={THICKNESS_RANGE}
         onChange={(thickness) => set({ thickness })}
       />
+      <MaterialControls material={props.material} onChange={(material) => set({ material })} />
       {wall ? (
         <>
           <dl className="facts">

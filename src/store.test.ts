@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './store'
 import { wallFootprints } from './model/wallGeometry'
 import { WALL_DEFAULTS } from './model/walls'
+import { applyPreset, DEFAULT_MATERIAL, PRESETS } from './model/materials'
 
 const p = (x: number, z: number) => ({ x, z })
 const store = () => useStore.getState()
@@ -53,6 +54,20 @@ describe('wall editing', () => {
     store().setWallDefaults({ height: 2.4 })
     store().applyDefaultsToAll()
     expect(store().walls.map((w) => w.height)).toEqual([2.4, 2.4])
+  })
+
+  it("changing one wall's material leaves the other untouched", () => {
+    const [a, b] = drawL()
+    store().updateWall(a.id, { material: { ...a.material, color: '#ff0000' } })
+    expect(store().walls.find((w) => w.id === a.id)!.material.color).toBe('#ff0000')
+    expect(store().walls.find((w) => w.id === b.id)!.material).toEqual(WALL_DEFAULTS.material)
+  })
+
+  it('applying the defaults to every wall includes the material', () => {
+    drawL()
+    store().setWallDefaults({ material: applyPreset(DEFAULT_MATERIAL, PRESETS[3]) })
+    store().applyDefaultsToAll()
+    expect(store().walls.map((w) => w.material.color)).toEqual([PRESETS[3].color, PRESETS[3].color])
   })
 
   it('deleting the selected wall clears the selection', () => {

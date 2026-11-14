@@ -1,9 +1,12 @@
 import { create } from 'zustand'
 import type { Units } from './units'
 import { metresPerPixel, type Px } from './plan/geometry'
-import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall } from './model/walls'
+import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type WallProps } from './model/walls'
 
-export type WallProps = Pick<Wall, 'height' | 'thickness'>
+export interface Texture {
+  url: string
+  name: string
+}
 
 export interface Plan {
   url: string
@@ -35,6 +38,8 @@ interface State {
   /** Height and thickness given to newly drawn walls. */
   wallDefaults: WallProps
   selectedWallId: string | null
+  /** Uploaded photo textures, by id. */
+  textures: Record<string, Texture>
   /** Corners of the wall chain being drawn, in world metres. */
   draft: Vec2[]
 
@@ -55,6 +60,8 @@ interface State {
   deleteWall: (id: string) => void
   setWallDefaults: (props: Partial<WallProps>) => void
   applyDefaultsToAll: () => void
+  /** Load an image as a texture and return its id. */
+  addTexture: (file: File) => Promise<string>
 }
 
 export const useStore = create<State>()((set, get) => ({
@@ -68,6 +75,7 @@ export const useStore = create<State>()((set, get) => ({
   walls: [],
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
+  textures: {},
   draft: [],
 
   setUnits: (units) => set({ units }),
@@ -156,4 +164,19 @@ export const useStore = create<State>()((set, get) => ({
 
   applyDefaultsToAll: () =>
     set((s) => ({ walls: s.walls.map((w) => ({ ...w, ...s.wallDefaults })) })),
+
+  addTexture: async (file) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.src = url
+    try {
+      await img.decode()
+    } catch (err) {
+      URL.revokeObjectURL(url)
+      throw err
+    }
+    const id = crypto.randomUUID()
+    set((s) => ({ textures: { ...s.textures, [id]: { url, name: file.name } } }))
+    return id
+  },
 }))

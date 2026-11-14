@@ -2,6 +2,8 @@
 // Coordinates are world metres on the ground plane (x, z). Walls join where
 // their endpoints coincide.
 
+import { DEFAULT_MATERIAL, type Material } from './materials'
+
 export type Vec2 = { x: number; z: number }
 
 export interface Wall {
@@ -12,12 +14,15 @@ export interface Wall {
   height: number
   /** metres */
   thickness: number
+  material: Material
 }
 
-export const WALL_DEFAULTS = { height: 2.7, thickness: 0.15 }
+export type WallProps = Pick<Wall, 'height' | 'thickness' | 'material'>
 
-export function createWall(start: Vec2, end: Vec2, props = WALL_DEFAULTS): Wall {
-  return { id: crypto.randomUUID(), start, end, ...props }
+export const WALL_DEFAULTS: WallProps = { height: 2.7, thickness: 0.15, material: DEFAULT_MATERIAL }
+
+export function createWall(start: Vec2, end: Vec2, props: Partial<WallProps> = {}): Wall {
+  return { id: crypto.randomUUID(), start, end, ...WALL_DEFAULTS, ...props }
 }
 
 export function distance(a: Vec2, b: Vec2): number {
@@ -29,7 +34,7 @@ export function wallLength(w: Wall): number {
 }
 
 /** Walls for a chain of corner points, skipping zero-length segments. */
-export function wallsFromChain(points: Vec2[], props = WALL_DEFAULTS): Wall[] {
+export function wallsFromChain(points: Vec2[], props: Partial<WallProps> = {}): Wall[] {
   const walls: Wall[] = []
   for (let i = 1; i < points.length; i++) {
     if (distance(points[i - 1], points[i]) > 1e-9) walls.push(createWall(points[i - 1], points[i], props))
