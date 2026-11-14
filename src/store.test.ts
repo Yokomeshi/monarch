@@ -302,6 +302,16 @@ describe('furniture', () => {
     expect(store().objects).toHaveLength(1)
   })
 
+  it('duplicating a piece adds a copy beside it and selects the copy', () => {
+    store().startPlacingObject('chair')
+    store().placeObject({ x: 1, z: 1 })
+    const original = store().objects[0]
+    store().duplicateObject(original.id)
+    const [, copy] = store().objects
+    expect(copy).toMatchObject({ kind: 'chair', position: { x: 1.5, z: 1.5 } })
+    expect(store().selectedObjectId).toBe(copy.id)
+  })
+
   it('furniture survives save and load', async () => {
     store().startPlacingObject('wardrobe')
     store().placeObject({ x: 1, z: 2 })

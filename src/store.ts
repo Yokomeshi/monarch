@@ -6,7 +6,9 @@ import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type W
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
 import { editOpening, openingAt, scaleOpenings, type Opening } from './model/openings'
-import { createObject, resizeObject, scaleObjects, type ObjectKind, type PlacedObject } from './model/objects'
+import {
+  createObject, duplicateObject, resizeObject, scaleObjects, type ObjectKind, type PlacedObject,
+} from './model/objects'
 
 export interface Texture {
   url: string
@@ -101,6 +103,8 @@ interface State {
   selectObject: (id: string | null) => void
   updateObject: (id: string, patch: Partial<PlacedObject>) => void
   deleteObject: (id: string) => void
+  /** Copy a piece and select the copy. */
+  duplicateObject: (id: string) => void
   selectRoom: (id: string | null) => void
   setRoomMaterial: (id: string, part: keyof RoomMaterials, material: Material) => void
   /** Give every room this room's floor and ceiling. */
@@ -289,6 +293,13 @@ export const useStore = create<State>()((set, get) => ({
       objects: s.objects.filter((o) => o.id !== id),
       selectedObjectId: s.selectedObjectId === id ? null : s.selectedObjectId,
     })),
+
+  duplicateObject: (id) => {
+    const original = get().objects.find((o) => o.id === id)
+    if (!original) return
+    const copy = duplicateObject(original)
+    set((s) => ({ objects: [...s.objects, copy], ...NO_SELECTION, selectedObjectId: copy.id }))
+  },
 
   selectRoom: (selectedRoomId) => set({ ...NO_SELECTION, selectedRoomId }),
 

@@ -5,10 +5,13 @@ import { Edges } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useStore } from '../store'
 import { objectParts, type PlacedObject } from '../model/objects'
+import { snapToWalls } from '../model/objectSnap'
 import { Surface } from './Surface'
 
 const MAX_CLICK_DRAG_PX = 4
 const GROUND = new Plane(new Vector3(0, 1, 0), 0)
+/** A dragged piece snaps to a wall when its back is within this many metres of it. */
+const SNAP_DISTANCE = 0.25
 
 /** Furniture, and the click target for placing a new piece. */
 export function Objects() {
@@ -68,7 +71,11 @@ function ObjectModel({ object, selected, interactive }: { object: PlacedObject; 
   }
   const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
     const hit = grab.current && groundPoint(e)
-    if (hit) updateObject(object.id, { position: { x: hit.x + grab.current!.x, z: hit.z + grab.current!.z } })
+    if (!hit) return
+    const position = { x: hit.x + grab.current!.x, z: hit.z + grab.current!.z }
+    // Holding Alt moves the piece freely.
+    const snap = e.nativeEvent.altKey ? null : snapToWalls({ ...object, position }, useStore.getState().walls, SNAP_DISTANCE)
+    updateObject(object.id, snap ?? { position })
   }
   const endDrag = (e: ThreeEvent<PointerEvent>) => {
     if (!grab.current) return
