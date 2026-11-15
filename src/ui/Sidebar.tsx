@@ -8,6 +8,7 @@ import { ObjectPanel } from './ObjectPanel'
 import { SunPanel } from './SunPanel'
 import { LightPanel } from './LightPanel'
 import { TakeoffPanel } from './TakeoffPanel'
+import { CostPanel } from './CostPanel'
 import { LIBRARY, type ObjectKind } from '../model/objects'
 import { wallLength } from '../model/walls'
 import { WallPanel } from './WallPanel'
@@ -88,6 +89,7 @@ export function Sidebar() {
       <FurniturePanel />
       <RoomsPanel />
       <TakeoffPanel />
+      <CostPanel />
       <SunPanel />
       <LightsPanel />
       <Inspector />

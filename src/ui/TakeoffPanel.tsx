@@ -1,19 +1,13 @@
-import { useMemo } from 'react'
 import { useStore } from '../store'
-import { useRooms } from '../useRooms'
-import { takeoff } from '../model/takeoff'
+import { useTakeoff } from '../useTakeoff'
 import { formatArea, formatLength } from '../units'
 
 /** Quantity takeoff: how much of everything the model contains. */
 export function TakeoffPanel() {
   const units = useStore((s) => s.units)
-  const walls = useStore((s) => s.walls)
-  const openings = useStore((s) => s.openings)
-  const objects = useStore((s) => s.objects)
-  const lights = useStore((s) => s.lights)
-  const rooms = useRooms()
-  const t = useMemo(() => takeoff(walls, openings, rooms, objects, lights), [walls, openings, rooms, objects, lights])
-  if (walls.length === 0) return null
+  const hasWalls = useStore((s) => s.walls.length > 0)
+  const t = useTakeoff()
+  if (!hasWalls) return null
 
   return (
     <section>

@@ -390,3 +390,37 @@ section > button + .hint {
 .tool-light canvas {
   cursor: crosshair;
 }
+
+.cost {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cost th,
+.cost td {
+  padding: 3px 4px 3px 0;
+  text-align: right;
+  font-weight: normal;
+}
+
+.cost th:first-child {
+  text-align: left;
+}
+
+.cost thead th {
+  color: var(--muted);
+  vertical-align: bottom;
+}
+
+.cost input {
+  width: 64px;
+  text-align: right;
+}
+
+.cost tfoot th,
+.cost tfoot td {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}

@@ -4,6 +4,7 @@ import { DEFAULT_MATERIAL, ROOM_DEFAULTS } from './model/materials'
 import { createWall, WALL_DEFAULTS } from './model/walls'
 import { createModelObject, createObject } from './model/objects'
 import { DEFAULT_SUN } from './model/sun'
+import { DEFAULT_RATES } from './model/cost'
 
 const IMG = 'data:image/png;base64,AAAA'
 const MODEL = 'data:application/octet-stream;base64,AAAA'
@@ -39,6 +40,7 @@ function sample(): ProjectFile {
     models: { m1: { name: 'lamp.glb', format: 'glb', naturalSize: { width: 1, depth: 2, height: 3 }, data: MODEL } },
     sun: { enabled: true, latitude: 51.5, day: 172, hour: 14.5, north: 30 },
     lights: [{ id: 'l1', position: p(2, 1), lumens: 1200, kelvin: 4000 }],
+    costRates: { wall: 55, floor: 90, ceiling: 35, door: 450, window: 700, light: 120 },
     wallDefaults: WALL_DEFAULTS,
     rooms: {
       defaults: ROOM_DEFAULTS,
@@ -123,6 +125,21 @@ describe('parseProject', () => {
     ['an hour outside the day', (d: any) => (d.sun.hour = -1)],
     ['a non-numeric north', (d: any) => (d.sun.north = 'up')],
     ['a sun switch that is not on or off', (d: any) => (d.sun.enabled = 'yes')],
+  ])('rejects %s', (_name, edit) => {
+    expect(parse(edit)).toThrow(/damaged/)
+  })
+
+  it('opens a version 8 file, which has no cost rates, with the default rates', () => {
+    const project = parse((d) => {
+      d.version = 8
+      delete d.costRates
+    })()
+    expect(project.costRates).toEqual(DEFAULT_RATES)
+  })
+
+  it.each([
+    ['a negative cost rate', (d: any) => (d.costRates.wall = -1)],
+    ['a missing cost rate', (d: any) => delete d.costRates.door],
   ])('rejects %s', (_name, edit) => {
     expect(parse(edit)).toThrow(/damaged/)
   })

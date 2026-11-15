@@ -34,3 +34,40 @@ test('quantities follow the model as it is built', async ({ app }) => {
   await expect(q('wall-length')).toHaveText(`65' 7 3/8"`)
   await expect(q('floor-area')).toHaveText('242.4 sq ft')
 })
+
+test('the cost estimate multiplies quantities by editable rates, and the rates are saved', async ({ app }, testInfo) => {
+  await drawRoom(app) // 54 m² of wall, 22.5225 m² of floor and of ceiling
+  const cost = (name: string) => app.getByTestId(`cost-${name}`)
+  const wallRate = app.getByLabel('Walls rate')
+
+  // Default rates: walls 50, floors 80, ceilings 40 per m².
+  await expect(cost('wall')).toHaveText('2,700')
+  await expect(cost('floor')).toHaveText('1,802')
+  await expect(cost('ceiling')).toHaveText('901')
+  await expect(cost('door')).toHaveText('0')
+  await expect(cost('total')).toHaveText('5,403')
+
+  await wallRate.fill('100')
+  await expect(cost('wall')).toHaveText('5,400')
+  await expect(cost('total')).toHaveText('8,103')
+
+  const top = await topView(app)
+  await pressTool(app, 'Place door')
+  await click(app, top(0, 2))
+  await expect(cost('door')).toHaveText('400')
+  await expect(cost('wall')).toHaveText('5,211') // 1.89 m² less wall
+
+  // Imperial shows the same rate per square foot; the costs do not change.
+  await setUnits(app, 'Imperial')
+  await expect(wallRate).toHaveValue('9.29')
+  await expect(cost('wall')).toHaveText('5,211')
+  await setUnits(app, 'Metric')
+
+  const path = testInfo.outputPath('cost.json')
+  const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Save…' }).click()])
+  await download.saveAs(path)
+  await app.reload()
+  await app.getByTestId('project-input').setInputFiles(path)
+  await expect(wallRate).toHaveValue('100')
+  await expect(cost('wall')).toHaveText('5,211')
+})

@@ -1,7 +1,7 @@
 // Rough construction cost: the quantity takeoff multiplied by unit rates the user can edit.
 // Furniture is deliberately not costed.
 
-import type { Units } from '../units'
+import { SQ_METRES_PER_SQ_FOOT, type Units } from '../units'
 import type { Takeoff } from './takeoff'
 
 /** Unit rates in whole currency units. Area rates are stored per square metre, whatever the display units. */
@@ -64,8 +64,6 @@ export function formatMoney(amount: number): string {
   // `|| 0` turns the -0 that small negatives round to into 0.
   return String(Math.round(amount) || 0).replace(/\B(?=(\d{3})+$)/g, ',')
 }
-
-const SQ_METRES_PER_SQ_FOOT = 0.3048 * 0.3048
 
 /** The rate as shown and typed: area rates are per square foot in imperial units. */
 export function rateForDisplay(rate: number, unit: 'area' | 'each', units: Units): number {
