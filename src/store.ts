@@ -14,8 +14,11 @@ import { inspectModelFile } from './model3d'
 import { DEFAULT_SUN, type SunSettings } from './model/sun'
 import { createLight, scaleLights, type CeilingLight } from './model/lights'
 import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
-import { detectWalls } from './plan/detectWalls'
-import { readRaster } from './plan/readRaster'
+import { detectPlan } from './plan/detectWalls'
+import { cropPng, readRaster } from './plan/readRaster'
+import { cropSquare, gapSuggestions, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
+import { askJev } from './ai/jevClient'
+import { gapQuestion, parseGapAnswer } from './ai/jevOpenings'
 import { detectOptions, toWalls } from './plan/suggestWalls'
 
 export interface Texture {
@@ -38,6 +41,9 @@ export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object' 
 const NO_SELECTION = { selectedWallId: null, selectedRoomId: null, selectedOpeningId: null, selectedObjectId: null, selectedLightId: null }
 export type ViewMode = '3d' | 'top'
 
+/** No walls or gaps on offer. */
+const NO_SUGGESTION = { suggestedWalls: null, suggestedGaps: [], suggestedGapCrops: [], identifying: 'idle' as const }
+
 // Before calibration the plan is shown 20 m wide so it fits the default view.
 const UNCALIBRATED_WIDTH_M = 20
 
@@ -55,6 +61,12 @@ interface State {
   walls: Wall[]
   /** Walls detected in the plan image, waiting to be added or discarded. Null when there is no suggestion. */
   suggestedWalls: Wall[] | null
+  /** Gaps in the suggested walls: doors and windows, once identified. */
+  suggestedGaps: GapSuggestion[]
+  /** For each suggested gap, the square of the plan image (in its own pixels) that shows it. */
+  suggestedGapCrops: { x: number; y: number; size: number }[]
+  /** 'busy' while the gaps are being identified; a message if that failed. */
+  identifying: 'idle' | 'busy' | { error: string }
   /** Doors and windows, each attached to a wall. */
   openings: Opening[]
   /** Height and thickness given to newly drawn walls. */
@@ -107,7 +119,9 @@ interface State {
   clearWalls: () => void
   /** Find the walls drawn on the plan and offer them as a suggestion. */
   suggestWalls: () => Promise<void>
-  /** Add the suggested walls to the model. */
+  /** Ask the model what each gap in the suggested walls is. Sends a small image of each gap to the service. */
+  identifyGaps: () => Promise<void>
+  /** Add the suggested walls to the model, with a door or window for each gap identified as one. */
   acceptSuggestedWalls: () => void
   discardSuggestedWalls: () => void
   selectWall: (id: string | null) => void
@@ -183,7 +197,7 @@ export const useStore = create<State>()((set, get) => ({
   calibrationPoints: [],
   calibrationLine: null,
   walls: [],
-  suggestedWalls: null,
+  ...NO_SUGGESTION,
   openings: [],
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
@@ -243,7 +257,7 @@ export const useStore = create<State>()((set, get) => ({
       calibrationPoints: [],
       calibrationLine: null,
       draft: [],
-      suggestedWalls: null,
+      ...NO_SUGGESTION,
       frameRequest: s.frameRequest + 1,
     }))
   },
@@ -262,7 +276,7 @@ export const useStore = create<State>()((set, get) => ({
       plan: { ...plan, metresPerPx: newScale, calibrated: true },
       // Walls traced over the plan stay on the drawing.
       walls: scaleWalls(walls, newScale / plan.metresPerPx),
-      suggestedWalls: null, // found at the old scale
+      ...NO_SUGGESTION, // found at the old scale
       openings: scaleOpenings(s.openings, newScale / plan.metresPerPx),
       objects: scaleObjects(s.objects, newScale / plan.metresPerPx),
       lights: scaleLights(s.lights, newScale / plan.metresPerPx),
@@ -290,13 +304,52 @@ export const useStore = create<State>()((set, get) => ({
     const { raster, scale } = await readRaster(plan.url)
     // The raster may be a shrunken copy of the plan: describe it as its own plan covering the same ground.
     const frame = { widthPx: raster.width, heightPx: raster.height, metresPerPx: plan.metresPerPx / scale }
-    const detected = detectWalls(raster, detectOptions(frame.metresPerPx))
-    if (get().plan === plan) set({ suggestedWalls: toWalls(detected, frame, wallDefaults) })
+    const detected = detectPlan(raster, detectOptions(frame.metresPerPx))
+    if (get().plan !== plan) return
+    const suggestedWalls = toWalls(detected.walls, frame, wallDefaults)
+    const gaps = openingGaps(detected.gaps, frame.metresPerPx)
+    set({
+      ...NO_SUGGESTION,
+      suggestedWalls,
+      suggestedGaps: gapSuggestions(gaps, suggestedWalls, frame.metresPerPx),
+      // Squares are found on the raster; the crop is cut from the full image.
+      suggestedGapCrops: gaps.map((gap) => {
+        const { x, y, size } = cropSquare(gap, detected.walls[gap.wall], frame.metresPerPx)
+        return { x: x / scale, y: y / scale, size: size / scale }
+      }),
+    })
   },
 
-  acceptSuggestedWalls: () => set((s) => ({ walls: [...s.walls, ...(s.suggestedWalls ?? [])], suggestedWalls: null })),
+  identifyGaps: async () => {
+    const { plan, suggestedGaps, suggestedGapCrops } = get()
+    if (!plan || suggestedGaps.length === 0) return
+    set({ identifying: 'busy' })
+    try {
+      const answers = await Promise.all(
+        suggestedGapCrops.map(async (square) => parseGapAnswer(await askJev(gapQuestion(await cropPng(plan.url, square))))),
+      )
+      if (get().suggestedGaps !== suggestedGaps) return // discarded or redone meanwhile
+      set({
+        identifying: 'idle',
+        // A reply that can't be read leaves its gap unidentified.
+        suggestedGaps: suggestedGaps.map((gap, i) => ({ ...gap, ...(answers[i] ?? {}) })),
+      })
+    } catch (err) {
+      if (get().suggestedGaps === suggestedGaps) set({ identifying: { error: err instanceof Error ? err.message : String(err) } })
+    }
+  },
 
-  discardSuggestedWalls: () => set({ suggestedWalls: null }),
+  acceptSuggestedWalls: () =>
+    set((s) => {
+      const walls = s.suggestedWalls ?? []
+      return {
+        walls: [...s.walls, ...walls],
+        openings: [...s.openings, ...openingsFromGaps(s.suggestedGaps, walls)],
+        ...NO_SUGGESTION,
+      }
+    }),
+
+  discardSuggestedWalls: () => set(NO_SUGGESTION),
 
   selectWall: (selectedWallId) => set({ ...NO_SELECTION, selectedWallId }),
 
@@ -504,7 +557,7 @@ export const useStore = create<State>()((set, get) => ({
       calibrationLine: file.plan?.calibrationLine ?? null,
       calibrationPoints: [],
       walls: file.walls,
-      suggestedWalls: null,
+      ...NO_SUGGESTION,
       openings: file.openings,
       objects: file.objects,
       models: Object.fromEntries(

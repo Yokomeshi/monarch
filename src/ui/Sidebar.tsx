@@ -12,6 +12,7 @@ import { CostPanel } from './CostPanel'
 import { ChecksPanel } from './ChecksPanel'
 import { LIBRARY, type ObjectKind } from '../model/objects'
 import { wallLength } from '../model/walls'
+import { openingsFromGaps } from '../plan/suggestOpenings'
 import { WallPanel } from './WallPanel'
 
 export function Sidebar() {
@@ -178,6 +179,13 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
   const suggestWalls = useStore((s) => s.suggestWalls)
   const accept = useStore((s) => s.acceptSuggestedWalls)
   const discard = useStore((s) => s.discardSuggestedWalls)
+  const gaps = useStore((s) => s.suggestedGaps)
+  const identifying = useStore((s) => s.identifying)
+  const identifyGaps = useStore((s) => s.identifyGaps)
+  const identified = gaps.some((g) => g.kind !== null)
+  const added = openingsFromGaps(gaps, suggested ?? [])
+  const doors = added.filter((o) => o.type === 'door').length
+  const windows = added.length - doors
 
   return (
     <section>
@@ -203,9 +211,38 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
       ) : (
         <>
           <p className="hint" data-testid="detect-result">
-            Found {suggested.length} {suggested.length === 1 ? 'wall' : 'walls'}, shown in orange. Doors and windows are
-            bridged; add them afterwards.
+            Found {suggested.length} {suggested.length === 1 ? 'wall' : 'walls'}, shown in orange
+            {gaps.length > 0 && `, with ${gaps.length} ${gaps.length === 1 ? 'gap' : 'gaps'} bridged`}.
           </p>
+          {gaps.length > 0 && (
+            <>
+              {identified ? (
+                <p className="hint" data-testid="identify-result">
+                  {doors} {doors === 1 ? 'door' : 'doors'} (green) and {windows} {windows === 1 ? 'window' : 'windows'}{' '}
+                  (blue) will be added.
+                  {gaps.length > doors + windows && ` ${gaps.length - doors - windows} left as plain wall.`}
+                </p>
+              ) : (
+                <p className="hint">
+                  Gaps are where doors and windows are drawn. Identifying them sends a small image of each gap to
+                  TypeSafe's Jev service.
+                </p>
+              )}
+              {typeof identifying === 'object' && (
+                <p className="error" data-testid="identify-error">
+                  Couldn't identify the gaps: {identifying.error}. This needs the app run locally with a TypeSafe key;
+                  see the README.
+                </p>
+              )}
+              {!identified && (
+                <p>
+                  <button disabled={identifying === 'busy'} onClick={identifyGaps}>
+                    {identifying === 'busy' ? 'Identifying…' : 'Identify doors and windows'}
+                  </button>
+                </p>
+              )}
+            </>
+          )}
           <div className="row">
             <button onClick={accept}>Add walls</button>
             <button onClick={discard}>Discard</button>

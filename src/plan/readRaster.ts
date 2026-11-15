@@ -20,3 +20,21 @@ export async function readRaster(url: string): Promise<{ raster: Raster; scale: 
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
   return { raster: { width: canvas.width, height: canvas.height, data }, scale }
 }
+
+/** Shown to a model at this size: big enough to read a door arc, small enough to send quickly. */
+const CROP_SIDE = 512
+
+/** A square of the image as a PNG, base64-encoded without a data: prefix. `square` is in image pixels and may overhang the image. */
+export async function cropPng(url: string, square: { x: number; y: number; size: number }): Promise<string> {
+  const img = new Image()
+  img.src = url
+  await img.decode()
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = CROP_SIDE
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff' // paper, where the square overhangs the image
+  ctx.fillRect(0, 0, CROP_SIDE, CROP_SIDE)
+  const k = CROP_SIDE / square.size
+  ctx.drawImage(img, -square.x * k, -square.y * k, img.naturalWidth * k, img.naturalHeight * k)
+  return canvas.toDataURL('image/png').split(',')[1]
+}
