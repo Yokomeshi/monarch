@@ -110,3 +110,38 @@ test('without the service, identifying fails with an explanation and the walls c
   await expect(app.getByTestId('wall-count')).toHaveText('6')
   await expect(app.getByTestId('opening-summary')).toBeHidden()
 })
+
+test('the hosted app asks for its access password, remembers it, and sends it with each request', async ({ page: app }) => {
+  // The plain page: the browser logs the 401s itself. The stand-in server wants the password "open sesame".
+  await app.goto('/')
+  const passwords: (string | undefined)[] = []
+  await app.route('**/jev', async (route) => {
+    const password = route.request().headers()['x-app-password']
+    passwords.push(password)
+    if (password === 'open sesame') await route.fulfill({ json: jevReply('door', 0.99) })
+    else await route.fulfill({ status: 401, json: { error: 'Wrong or missing password' } })
+  })
+  const identify = app.getByRole('button', { name: 'Identify doors and windows' })
+  const error = app.getByTestId('identify-error')
+
+  await detectOnOpeningsPlan(app)
+  await identify.click()
+  await expect(error).toHaveText('This needs the access password.')
+  expect(passwords.every((p) => p === undefined), 'no password sent before one is entered').toBe(true)
+
+  await app.getByLabel('Access password').fill('guess')
+  await identify.click()
+  await expect(error).toHaveText('That password was not accepted.')
+
+  await app.getByLabel('Access password').fill('open sesame')
+  await identify.click()
+  await expect(app.getByTestId('identify-result')).toContainText('4 doors (green) and 0 windows (blue) will be added.')
+
+  // Remembered in this browser: after a reload it is sent without asking.
+  await app.reload()
+  passwords.length = 0
+  await detectOnOpeningsPlan(app)
+  await identify.click()
+  await expect(app.getByTestId('identify-result')).toContainText('4 doors')
+  expect(passwords).toEqual(['open sesame', 'open sesame', 'open sesame', 'open sesame'])
+})

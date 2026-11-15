@@ -182,6 +182,8 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
   const gaps = useStore((s) => s.suggestedGaps)
   const identifying = useStore((s) => s.identifying)
   const identifyGaps = useStore((s) => s.identifyGaps)
+  const accessPassword = useStore((s) => s.accessPassword)
+  const setAccessPassword = useStore((s) => s.setAccessPassword)
   const identified = gaps.some((g) => g.kind !== null)
   const added = openingsFromGaps(gaps, suggested ?? [])
   const doors = added.filter((o) => o.type === 'door').length
@@ -228,12 +230,26 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
                   TypeSafe's Jev service.
                 </p>
               )}
-              {typeof identifying === 'object' && (
-                <p className="error" data-testid="identify-error">
-                  Couldn't identify the gaps: {identifying.error}. This needs the app run locally with a TypeSafe key;
-                  see the README.
-                </p>
-              )}
+              {typeof identifying === 'object' &&
+                (identifying.needsPassword ? (
+                  <>
+                    <p className="error" data-testid="identify-error">
+                      {accessPassword ? 'That password was not accepted.' : 'This needs the access password.'}
+                    </p>
+                    <label htmlFor="access-password">Access password</label>
+                    <input
+                      id="access-password"
+                      type="password"
+                      value={accessPassword}
+                      onChange={(e) => setAccessPassword(e.target.value)}
+                    />
+                  </>
+                ) : (
+                  <p className="error" data-testid="identify-error">
+                    Couldn't identify the gaps: {identifying.error}. This needs the app run with a TypeSafe key; see
+                    the README.
+                  </p>
+                ))}
               {!identified && (
                 <p>
                   <button disabled={identifying === 'busy'} onClick={identifyGaps}>

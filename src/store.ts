@@ -17,7 +17,7 @@ import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
 import { detectPlan } from './plan/detectWalls'
 import { cropPng, readRaster } from './plan/readRaster'
 import { cropSquare, gapSuggestions, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
-import { askJev } from './ai/jevClient'
+import { askJev, JevError } from './ai/jevClient'
 import { gapQuestion, parseGapAnswer } from './ai/jevOpenings'
 import { detectOptions, toWalls } from './plan/suggestWalls'
 
@@ -66,7 +66,9 @@ interface State {
   /** For each suggested gap, the square of the plan image (in its own pixels) that shows it. */
   suggestedGapCrops: { x: number; y: number; size: number }[]
   /** 'busy' while the gaps are being identified; a message if that failed. */
-  identifying: 'idle' | 'busy' | { error: string }
+  identifying: 'idle' | 'busy' | { error: string; needsPassword: boolean }
+  /** The hosted app's shared access password for the door and window service. Kept in this browser. */
+  accessPassword: string
   /** Doors and windows, each attached to a wall. */
   openings: Opening[]
   /** Height and thickness given to newly drawn walls. */
@@ -124,6 +126,7 @@ interface State {
   /** Add the suggested walls to the model, with a door or window for each gap identified as one. */
   acceptSuggestedWalls: () => void
   discardSuggestedWalls: () => void
+  setAccessPassword: (password: string) => void
   selectWall: (id: string | null) => void
   updateWall: (id: string, props: Partial<WallProps>) => void
   deleteWall: (id: string) => void
@@ -188,6 +191,16 @@ function revoke(url: string) {
   if (url.startsWith('blob:')) URL.revokeObjectURL(url)
 }
 
+const PASSWORD_KEY = 'monarch.accessPassword'
+
+function savedPassword(): string {
+  try {
+    return localStorage.getItem(PASSWORD_KEY) ?? ''
+  } catch {
+    return '' // no storage (tests, or blocked by the browser)
+  }
+}
+
 export const useStore = create<State>()((set, get) => ({
   units: 'metric',
   viewMode: '3d',
@@ -198,6 +211,7 @@ export const useStore = create<State>()((set, get) => ({
   calibrationLine: null,
   walls: [],
   ...NO_SUGGESTION,
+  accessPassword: savedPassword(),
   openings: [],
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
@@ -321,12 +335,12 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   identifyGaps: async () => {
-    const { plan, suggestedGaps, suggestedGapCrops } = get()
+    const { plan, suggestedGaps, suggestedGapCrops, accessPassword } = get()
     if (!plan || suggestedGaps.length === 0) return
     set({ identifying: 'busy' })
     try {
       const answers = await Promise.all(
-        suggestedGapCrops.map(async (square) => parseGapAnswer(await askJev(gapQuestion(await cropPng(plan.url, square))))),
+        suggestedGapCrops.map(async (square) => parseGapAnswer(await askJev(gapQuestion(await cropPng(plan.url, square)), accessPassword))),
       )
       if (get().suggestedGaps !== suggestedGaps) return // discarded or redone meanwhile
       set({
@@ -335,7 +349,9 @@ export const useStore = create<State>()((set, get) => ({
         suggestedGaps: suggestedGaps.map((gap, i) => ({ ...gap, ...(answers[i] ?? {}) })),
       })
     } catch (err) {
-      if (get().suggestedGaps === suggestedGaps) set({ identifying: { error: err instanceof Error ? err.message : String(err) } })
+      if (get().suggestedGaps !== suggestedGaps) return
+      const needsPassword = err instanceof JevError && err.status === 401
+      set({ identifying: { error: err instanceof Error ? err.message : String(err), needsPassword } })
     }
   },
 
@@ -350,6 +366,15 @@ export const useStore = create<State>()((set, get) => ({
     }),
 
   discardSuggestedWalls: () => set(NO_SUGGESTION),
+
+  setAccessPassword: (accessPassword) => {
+    set({ accessPassword })
+    try {
+      localStorage.setItem(PASSWORD_KEY, accessPassword)
+    } catch {
+      // Storage can be blocked; the password then lasts until the page is closed.
+    }
+  },
 
   selectWall: (selectedWallId) => set({ ...NO_SELECTION, selectedWallId }),
 
