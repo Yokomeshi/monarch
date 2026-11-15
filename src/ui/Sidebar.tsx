@@ -14,6 +14,7 @@ import { LIBRARY, type ObjectKind } from '../model/objects'
 import { wallLength } from '../model/walls'
 import { openingsFromGaps } from '../plan/suggestOpenings'
 import { thinWalls } from '../plan/suggestWalls'
+import { toIfc } from '../export/ifc'
 import { WallPanel } from './WallPanel'
 
 export function Sidebar() {
@@ -353,6 +354,17 @@ function ProjectPanel() {
     }
   }
 
+  const onExport = () => {
+    const { plan, walls, openings, objects } = useStore.getState()
+    const name = plan?.name.replace(/\.[^.]+$/, '') ?? 'Monarch model'
+    const url = URL.createObjectURL(new Blob([toIfc({ name, walls, openings, objects })], { type: 'application/x-step' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'monarch-model.ifc'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const onOpen = async (file: File | undefined) => {
     if (!file) return
     setError(null)
@@ -382,6 +394,11 @@ function ProjectPanel() {
           />
         </label>
       </div>
+      <p>
+        <button title="Walls, doors, windows, floors and furniture as an IFC file, for BIM software" onClick={onExport}>
+          Export IFC…
+        </button>
+      </p>
       {error && (
         <p className="error" data-testid="project-error">
           {error}

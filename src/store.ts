@@ -52,6 +52,8 @@ interface State {
   viewMode: ViewMode
   /** Bumped to ask the camera to frame the plan. */
   frameRequest: number
+  /** A picture to save: the current view, or a 360° panorama from the camera. A new object for each request. */
+  captureRequest: { kind: 'image' | 'panorama' } | null
   tool: Tool
   plan: Plan | null
   /** Points being picked while calibrating, in plan pixels (0-2). */
@@ -110,6 +112,7 @@ interface State {
   setUnits: (units: Units) => void
   setViewMode: (mode: ViewMode) => void
   requestFrame: () => void
+  requestCapture: (kind: 'image' | 'panorama') => void
   setTool: (tool: Tool) => void
   loadPlan: (file: File) => Promise<void>
   addCalibrationPoint: (p: Px) => void
@@ -211,6 +214,7 @@ export const useStore = create<State>()((set, get) => ({
   units: 'metric',
   viewMode: '3d',
   frameRequest: 0,
+  captureRequest: null,
   tool: 'none',
   plan: null,
   calibrationPoints: [],
@@ -244,6 +248,7 @@ export const useStore = create<State>()((set, get) => ({
   setUnits: (units) => set({ units }),
   setViewMode: (viewMode) => set((s) => ({ viewMode, frameRequest: s.frameRequest + 1 })),
   requestFrame: () => set((s) => ({ frameRequest: s.frameRequest + 1 })),
+  requestCapture: (kind) => set({ captureRequest: { kind } }),
 
   setTool: (tool) => {
     // Leaving the wall tool keeps what was drawn so far.

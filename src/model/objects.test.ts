@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createModelObject, createObject, duplicateObject, fitSize, LIBRARY, modelFormat, objectParts, resizeObject,
-  resizeProportional, scaleObjects, type ObjectKind, type Size3,
+  createModelObject, createObject, duplicateObject, fitSize, isCabinet, LIBRARY, modelFormat, objectParts, resizeObject,
+  resizeProportional, scaleObjects, type CabinetKind, type CabinetOptions, type ObjectKind, type Size3,
 } from './objects'
 
 const kinds = Object.keys(LIBRARY) as ObjectKind[]
 const p = (x: number, z: number) => ({ x, z })
 
 /** Every part must stay inside the object's stated size: that is what makes the sliders truthful. */
-function expectWithin(kind: ObjectKind, size: Size3) {
-  const parts = objectParts({ ...createObject(kind, p(0, 0)), size })
+function expectWithin(kind: ObjectKind, size: Size3, cabinet?: CabinetOptions) {
+  const parts = objectParts({ ...createObject(kind, p(0, 0)), size, ...(cabinet && { cabinet }) })
   expect(parts.length).toBeGreaterThan(0)
   const eps = 1e-9
   for (const { size: [w, h, d], position: [x, y, z] } of parts) {
@@ -25,8 +25,10 @@ function expectWithin(kind: ObjectKind, size: Size3) {
 }
 
 describe('furniture library', () => {
-  it('has the eight starter pieces, each with a name and a realistic default size', () => {
-    expect(kinds.sort()).toEqual(['bed', 'bookshelf', 'chair', 'counter', 'desk', 'sofa', 'table', 'wardrobe'])
+  it('has the eight starter pieces and three cabinets, each with a name and a realistic default size', () => {
+    expect(kinds.sort()).toEqual([
+      'baseCabinet', 'bed', 'bookshelf', 'chair', 'counter', 'desk', 'sofa', 'table', 'tallCabinet', 'wallCabinet', 'wardrobe',
+    ])
     for (const kind of kinds) {
       const { name, size } = LIBRARY[kind]
       expect(name).toMatch(/^[A-Z]/)
@@ -64,6 +66,137 @@ describe('furniture library', () => {
         .map((q) => q.size[0])
     expect(legs(1.6)).toHaveLength(4)
     expect(legs(4)).toEqual(legs(1.6))
+  })
+})
+
+describe('cabinets', () => {
+  const cabinets: CabinetKind[] = ['baseCabinet', 'wallCabinet', 'tallCabinet']
+  const doors: CabinetOptions = { fronts: 'doors' }
+  const drawers: CabinetOptions = { fronts: 'drawers' }
+  const sized = (kind: CabinetKind, patch: Partial<Size3>) => ({ ...LIBRARY[kind].size, ...patch })
+  const cabinetParts = (kind: CabinetKind, cabinet: CabinetOptions, patch: Partial<Size3> = {}) =>
+    objectParts({ kind, size: sized(kind, patch), cabinet })
+  /** Doors and drawer fronts: thin plain slabs. The plinth and carcass are deep, the handles and worktop accented. */
+  const fronts = (kind: CabinetKind, cabinet: CabinetOptions, patch: Partial<Size3> = {}) =>
+    cabinetParts(kind, cabinet, patch).filter((q) => !q.accent && q.size[2] < 0.05)
+  const bodies = (kind: CabinetKind) => cabinetParts(kind, doors).filter((q) => !q.accent && q.size[2] >= 0.05)
+  const worktops = (kind: CabinetKind) => cabinetParts(kind, doors).filter((q) => q.accent && q.size[2] === LIBRARY[kind].size.depth)
+  const frontEdge = (q: { size: number[]; position: number[] }) => q.position[2] + q.size[2] / 2
+
+  it('names them and gives them standard sizes', () => {
+    expect(LIBRARY.baseCabinet).toMatchObject({ name: 'Base cabinet', size: { width: 0.6, depth: 0.6, height: 0.9 } })
+    expect(LIBRARY.wallCabinet).toMatchObject({ name: 'Wall cabinet', size: { width: 0.6, depth: 0.35, height: 0.72 } })
+    expect(LIBRARY.tallCabinet).toMatchObject({ name: 'Tall cabinet', size: { width: 0.6, depth: 0.6, height: 2.1 } })
+  })
+
+  it('tells cabinets from other pieces', () => {
+    expect(cabinets.map(isCabinet)).toEqual([true, true, true])
+    expect(kinds.filter(isCabinet).sort()).toEqual([...cabinets].sort())
+    expect(isCabinet('model')).toBe(false)
+  })
+
+  it('has one door per 0.6 m of width, all the same size', () => {
+    for (const kind of ['baseCabinet', 'wallCabinet'] as const) {
+      expect(fronts(kind, doors, { width: 0.6 })).toHaveLength(1)
+      expect(fronts(kind, doors, { width: 0.9 })).toHaveLength(2)
+      expect(fronts(kind, doors, { width: 1.2 })).toHaveLength(2)
+      expect(fronts(kind, doors, { width: 1.5 })).toHaveLength(3)
+    }
+    const three = fronts('baseCabinet', doors, { width: 1.5 })
+    for (const q of three) {
+      expect(q.size[0]).toBeCloseTo(three[0].size[0], 9)
+      expect(q.size[0]).toBeLessThan(0.5)
+    }
+    // Gaps between and around the doors, so the seams show.
+    expect(three[0].size[0] * 3).toBeLessThan(1.5)
+    expect(new Set(three.map((q) => q.position[0].toFixed(6))).size).toBe(3)
+  })
+
+  it('a tall cabinet has an upper and a lower door in each column', () => {
+    expect(fronts('tallCabinet', doors, { width: 0.6 })).toHaveLength(2)
+    expect(fronts('tallCabinet', doors, { width: 0.9 })).toHaveLength(4)
+  })
+
+  it('has full-width drawers no taller than 0.3 m, so more of them as it gets taller', () => {
+    expect(fronts('baseCabinet', drawers)).toHaveLength(3)
+    expect(fronts('baseCabinet', drawers, { height: 0.4 })).toHaveLength(1)
+    expect(fronts('baseCabinet', drawers, { height: 1.2 })).toHaveLength(4)
+    expect(fronts('wallCabinet', drawers)).toHaveLength(3)
+    expect(fronts('baseCabinet', drawers, { width: 1.5 })).toHaveLength(3)
+    for (const q of fronts('baseCabinet', drawers)) {
+      expect(q.size[1]).toBeLessThanOrEqual(0.3)
+      expect(q.size[0]).toBeGreaterThan(0.58)
+    }
+  })
+
+  it.each(cabinets)('%s has its fronts on the front face, proud of the carcass, each with a handle', (kind) => {
+    for (const cabinet of [doors, drawers]) {
+      const carcassFront = Math.max(...bodies(kind).map(frontEdge))
+      const slabs = fronts(kind, cabinet)
+      const handles = cabinetParts(kind, cabinet).filter((q) => q.accent && q.size[2] < 0.05)
+      expect(handles).toHaveLength(slabs.length)
+      for (const q of slabs) {
+        expect(q.position[2]).toBeGreaterThan(0)
+        expect(q.position[2] - q.size[2] / 2).toBeCloseTo(carcassFront, 9)
+      }
+      for (const q of handles) expect(q.position[2] - q.size[2] / 2).toBeCloseTo(frontEdge(slabs[0]), 9)
+    }
+  })
+
+  it('a base cabinet has a worktop on top and a plinth recessed from the front', () => {
+    const { width, depth, height } = LIBRARY.baseCabinet.size
+    const [worktop] = worktops('baseCabinet')
+    expect(worktop.size[0]).toBe(width)
+    expect(worktop.position[1] + worktop.size[1] / 2).toBeCloseTo(height, 9)
+    expect(frontEdge(worktop)).toBeCloseTo(depth / 2, 9)
+    const [plinth, carcass] = bodies('baseCabinet').sort((a, b) => a.position[1] - b.position[1])
+    expect(plinth.position[1] - plinth.size[1] / 2).toBe(0)
+    expect(carcass.position[1] - carcass.size[1] / 2).toBeCloseTo(plinth.size[1], 9)
+    expect(frontEdge(plinth)).toBeLessThan(frontEdge(carcass) - 0.03)
+    // The worktop overhangs the carcass and its fronts.
+    expect(frontEdge(worktop)).toBeGreaterThan(frontEdge(fronts('baseCabinet', doors)[0]))
+  })
+
+  it('a wall cabinet has neither plinth nor worktop, a tall cabinet only a plinth', () => {
+    expect(bodies('wallCabinet')).toHaveLength(1)
+    expect(worktops('wallCabinet')).toHaveLength(0)
+    expect(bodies('tallCabinet')).toHaveLength(2)
+    expect(worktops('tallCabinet')).toHaveLength(0)
+  })
+
+  it.each(cabinets)('%s stays inside its size with doors or drawers, from the smallest size to the largest', (kind) => {
+    for (const cabinet of [doors, drawers]) {
+      expectWithin(kind, LIBRARY[kind].size, cabinet)
+      expectWithin(kind, { width: 0.1, depth: 0.1, height: 0.1 }, cabinet)
+      expectWithin(kind, { width: 10, depth: 10, height: 10 }, cabinet)
+      expectWithin(kind, { width: 10, depth: 0.1, height: 0.1 }, cabinet)
+      expectWithin(kind, { width: 0.1, depth: 0.1, height: 10 }, cabinet)
+    }
+  })
+
+  it('a new cabinet has doors, and a wall cabinet hangs at 1.45 m', () => {
+    for (const kind of cabinets) expect(createObject(kind, p(0, 0)).cabinet).toEqual(doors)
+    expect(createObject('baseCabinet', p(0, 0)).cabinet).not.toBe(LIBRARY.baseCabinet.cabinet)
+    expect(createObject('wallCabinet', p(0, 0)).elevation).toBe(1.45)
+    expect(createObject('baseCabinet', p(0, 0))).not.toHaveProperty('elevation')
+    expect(createObject('tallCabinet', p(0, 0))).not.toHaveProperty('elevation')
+    const sofa = createObject('sofa', p(0, 0))
+    expect(sofa).not.toHaveProperty('cabinet')
+    expect(sofa).not.toHaveProperty('elevation')
+  })
+
+  it('a cabinet without options is drawn with doors', () => {
+    const { kind, size } = createObject('baseCabinet', p(0, 0))
+    expect(objectParts({ kind, size })).toEqual(objectParts({ kind, size, cabinet: doors }))
+  })
+
+  it('duplicating and resizing keep the options and the elevation', () => {
+    const o = { ...createObject('wallCabinet', p(0, 0)), cabinet: drawers, elevation: 1.6 }
+    const copy = duplicateObject(o)
+    expect(copy).toMatchObject({ cabinet: drawers, elevation: 1.6 })
+    expect(copy.cabinet).not.toBe(o.cabinet)
+    expect(resizeObject(o, { size: { width: 1.2, depth: 0.35, height: 0.72 } })).toMatchObject({ cabinet: drawers, elevation: 1.6 })
+    expect(duplicateObject(createObject('sofa', p(0, 0)))).not.toHaveProperty('cabinet')
   })
 })
 

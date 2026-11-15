@@ -1,5 +1,6 @@
 // Layout problems in the plan: furniture that runs into other furniture, into a wall,
-// or into the space a door needs to open. Plan view only; heights are ignored.
+// or into the space a door needs to open. Walls are judged in plan view only; pieces at
+// different heights (a wall cabinet over a base cabinet, or over a door) do not clash.
 
 import type { PlacedObject } from './objects'
 import { fitOpening, swingArc, type Opening } from './openings'
@@ -75,18 +76,23 @@ function extent(polygon: Vec2[], axis: Vec2): [number, number] {
  * each in input order (by piece, then by the other piece, wall or door).
  */
 export function findClashes(walls: Wall[], openings: Opening[], objects: PlacedObject[]): Clash[] {
-  const pieces = objects.map((o) => ({ id: o.id, shape: objectFootprint(o) }))
+  const pieces = objects.map((o) => {
+    const bottom = o.elevation ?? 0
+    return { id: o.id, shape: objectFootprint(o), bottom, top: bottom + o.size.height }
+  })
   const footprints = wallFootprints(walls)
   const wallById = new Map(walls.map((w) => [w.id, w]))
   const swings = openings.flatMap((o) => {
     const wall = wallById.get(o.wallId)
-    return o.type === 'door' && wall ? [{ id: o.id, shape: swingSector(o, wall) }] : []
+    return o.type === 'door' && wall ? [{ id: o.id, shape: swingSector(o, wall), top: o.sill + o.height }] : []
   })
 
   const clashes: Clash[] = []
   pieces.forEach((a, i) => {
     for (const b of pieces.slice(i + 1)) {
-      if (overlaps(a.shape, b.shape)) clashes.push({ kind: 'furniture-furniture', ids: [a.id, b.id] })
+      // One above the other, even touching, is not a clash.
+      const apart = a.bottom >= b.top - TOUCH_TOLERANCE || b.bottom >= a.top - TOUCH_TOLERANCE
+      if (!apart && overlaps(a.shape, b.shape)) clashes.push({ kind: 'furniture-furniture', ids: [a.id, b.id] })
     }
   })
   for (const piece of pieces) {
@@ -96,7 +102,8 @@ export function findClashes(walls: Wall[], openings: Opening[], objects: PlacedO
   }
   for (const piece of pieces) {
     for (const swing of swings) {
-      if (overlaps(piece.shape, swing.shape)) clashes.push({ kind: 'door-swing', ids: [piece.id, swing.id] })
+      // A piece mounted above the door's head is clear of its leaf.
+      if (piece.bottom < swing.top && overlaps(piece.shape, swing.shape)) clashes.push({ kind: 'door-swing', ids: [piece.id, swing.id] })
     }
   }
   return clashes

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import type { Page } from '@playwright/test'
 import {
   calibrate, CALIBRATED, click, clickCorners, colourAt, emptySpot, expect, field, fixture, materialName, planExtent,
-  planToWorld, setUnits, setView, test, topView, type, uploadPlan, view3d, pressTool
+  planToWorld, setUnits, setView, test, topView, type, uploadPlan, view3d, pressTool, drawRoom
 } from './helpers'
 
 const text = (page: Page, id: string) => page.getByTestId(id).textContent()
@@ -105,4 +105,28 @@ test('a file that is not a project is refused and keeps the current work', async
   await app.getByTestId('project-input').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') })
   await expect(app.getByTestId('project-error')).toHaveText("This file isn't a Monarch project.")
   await expect(app.getByTestId('plan-size')).toBeVisible()
+})
+
+test('export the model as an IFC file', async ({ app }, testInfo) => {
+  await drawRoom(app)
+  const top = await topView(app)
+  await pressTool(app, 'Place door')
+  await click(app, top(0, 2))
+  await pressTool(app, 'Sofa')
+  await click(app, top(0, 0))
+
+  const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Export IFC…' }).click()])
+  expect(download.suggestedFilename()).toBe('monarch-model.ifc')
+  const path = testInfo.outputPath('model.ifc')
+  await download.saveAs(path)
+  const text = readFileSync(path, 'utf8')
+  const count = (entity: string) => text.split(`=${entity}(`).length - 1
+
+  expect(text.startsWith('ISO-10303-21;')).toBe(true)
+  expect(text).toContain("FILE_SCHEMA(('IFC4'))")
+  expect(count('IFCWALL')).toBe(4)
+  expect(count('IFCDOOR')).toBe(1)
+  expect(count('IFCOPENINGELEMENT')).toBe(1)
+  expect(count('IFCSLAB')).toBe(1)
+  expect(count('IFCFURNITURE')).toBe(1)
 })

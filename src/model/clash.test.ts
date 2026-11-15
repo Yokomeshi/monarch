@@ -143,3 +143,23 @@ describe('order', () => {
     ])
   })
 })
+
+describe('pieces at different heights', () => {
+  const wall = createWall({ x: 0, z: 0 }, { x: 4, z: 0 })
+  const door = openingAt(wall, [], 'door', 2)! // 2.1 m high, swinging to the wall's left
+
+  it('one mounted above another does not clash with it', () => {
+    const below = { ...createObject('counter', { x: 1, z: 2 }), size: { width: 1, depth: 0.6, height: 0.9 } }
+    const above = { ...createObject('counter', { x: 1, z: 2 }), size: { width: 1, depth: 0.35, height: 0.7 }, elevation: 1.45 }
+    expect(findClashes([], [], [below, above])).toEqual([])
+    // Lowered into the piece below, it clashes.
+    expect(findClashes([], [], [below, { ...above, elevation: 0.5 }])).toHaveLength(1)
+  })
+
+  it('a piece above the head of a door is clear of its swing', () => {
+    // Where the door opens: 0.5 m to the wall's left, in front of the doorway.
+    const chair = piece('chair', 2, 0.5)
+    expect(findClashes([wall], [door], [chair]).map((c) => c.kind)).toContain('door-swing')
+    expect(findClashes([wall], [door], [{ ...chair, elevation: 2.2 }]).map((c) => c.kind)).not.toContain('door-swing')
+  })
+})
