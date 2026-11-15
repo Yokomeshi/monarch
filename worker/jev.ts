@@ -59,6 +59,11 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
   } catch {
     return json(502, { error: 'Could not reach Jev.' })
   }
+  // The app takes a 401 to mean its own password was wrong. When it is Jev refusing the server's key,
+  // asking the user for the password again would be no help, so say what it is.
+  if (upstream.status === 401 || upstream.status === 403) {
+    return json(502, { error: 'Jev did not accept the server\'s API key.' })
+  }
   // Jev's headers are left behind too; the app needs only the status and the JSON.
   return new Response(upstream.body, { status: upstream.status, headers: { 'Content-Type': 'application/json' } })
 }

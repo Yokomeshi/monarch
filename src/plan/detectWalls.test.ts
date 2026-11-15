@@ -131,6 +131,38 @@ describe('detectWalls', () => {
     ])
   })
 
+  it('measures a horizontal wall alone, not the stubs and the wall hanging from it', () => {
+    const image = blank(700, 400)
+    fill(image, 50, 100, 650, 120) // the wall: rows 100..119, centre-line y = 110
+    fill(image, 150, 120, 195, 150) // column stubs below it, 45 x 30
+    fill(image, 400, 120, 445, 150)
+    fill(image, 300, 120, 310, 300) // perpendicular wall meeting it
+    expect(detectWalls(image, options)).toEqual([
+      { start: { x: 50, y: 110 }, end: { x: 650, y: 110 }, thickness: 20 },
+      { start: { x: 305, y: 110 }, end: { x: 305, y: 300 }, thickness: 10 },
+    ])
+  })
+
+  it('measures a vertical wall alone, not the stubs and the wall hanging from it', () => {
+    const image = blank(400, 700)
+    fill(image, 100, 50, 120, 650) // the wall: columns 100..119, centre-line x = 110
+    fill(image, 120, 150, 150, 195) // column stubs beside it, 30 x 45
+    fill(image, 120, 400, 150, 445)
+    fill(image, 120, 300, 300, 310) // perpendicular wall meeting it
+    expect(detectWalls(image, options)).toEqual([
+      { start: { x: 110, y: 305 }, end: { x: 300, y: 305 }, thickness: 10 },
+      { start: { x: 110, y: 50 }, end: { x: 110, y: 650 }, thickness: 20 },
+    ])
+  })
+
+  it('keeps a wall with ragged ends as one wall of its full thickness', () => {
+    const image = blank(400, 100)
+    fill(image, 22, 20, 320, 25)
+    fill(image, 20, 25, 317, 30)
+    fill(image, 23, 30, 319, 36)
+    expect(detectWalls(image, options)).toEqual([{ start: { x: 20, y: 28 }, end: { x: 320, y: 28 }, thickness: 16 }])
+  })
+
   it('handles a 2000 x 2000 image quickly', () => {
     const image = blank(2000, 2000)
     for (let i = 100; i < 2000; i += 200) {
@@ -207,5 +239,19 @@ describe('detectPlan', () => {
     const { walls, gaps } = detectPlan(image, options)
     expect(walls).toHaveLength(2)
     expect(gaps).toEqual([])
+  })
+
+  it('drops a wall that snapping leaves shorter than minLength, keeping gap indices valid', () => {
+    const image = blank(500, 300)
+    fill(image, 100, 20, 138, 280) // vertical wall, 38 px thick, centre-line x = 119
+    fill(image, 97, 50, 141, 60) // 44 px nub across it: both ends snap to x = 119
+    fill(image, 200, 200, 300, 210)
+    fill(image, 350, 200, 480, 210) // 50 px gap
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toEqual([
+      { start: { x: 200, y: 205 }, end: { x: 480, y: 205 }, thickness: 10 },
+      { start: { x: 119, y: 20 }, end: { x: 119, y: 280 }, thickness: 38 },
+    ])
+    expect(gaps).toEqual([{ wall: 0, start: 100, end: 150 }])
   })
 })

@@ -114,7 +114,10 @@ function inLongRuns(mask: Uint8Array, width: number, height: number, min: number
 }
 
 /**
- * Horizontal bands: long row runs, stacked while they overlap from one row to the next.
+ * Horizontal bands: long row runs, stacked from one row to the next while they are the same stroke:
+ * a run extends a band only if the two overlap by more than half of the longer one's length.
+ * So ragged or stepped ends stay in one band, while a short stub or column attached to the side of
+ * a wall starts a band of its own instead of thickening the wall.
  * Only long runs count, so a perpendicular stroke (whose rows are as short as it is thick)
  * contributes nothing, and where strokes cross the long run simply passes through.
  */
@@ -136,7 +139,9 @@ function findBands(mask: Uint8Array, width: number, height: number, minLength: n
       next = []
       row = y
     }
-    const i = open.findIndex((b) => b.a0 < x1 && x0 < b.a1)
+    const i = open.findIndex(
+      (b) => 2 * (Math.min(b.a1, x1) - Math.max(b.a0, x0)) > Math.max(length(b), x1 - x0),
+    )
     if (i < 0) {
       next.push({ a0: x0, a1: x1, c0: y, c1: y + 1 })
       return
@@ -216,7 +221,9 @@ export function detectPlan(image: Raster, options: DetectOptions): { walls: Dete
   const horizontal = walls(solid, width, height)
   const vertical = walls(transpose(solid, width, height), height, width)
 
-  const inOrder = (bands: Wall[]) => bands.sort((p, q) => centre(p) - centre(q) || p.a0 - q.a0)
+  // Snapping can pull both ends of a short wall together: what is then shorter than minLength is dropped.
+  const inOrder = (bands: Wall[]) =>
+    bands.filter((b) => length(b) >= minLength).sort((p, q) => centre(p) - centre(q) || p.a0 - q.a0)
   const across = inOrder(snapEnds(horizontal, vertical))
   const down = inOrder(snapEnds(vertical, horizontal))
   return {

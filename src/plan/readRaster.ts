@@ -21,11 +21,21 @@ export async function readRaster(url: string): Promise<{ raster: Raster; scale: 
   return { raster: { width: canvas.width, height: canvas.height, data }, scale }
 }
 
+/** Each corner mark runs this share of the frame's side, leaving the middle of every side open. */
+const ARM = 0.4
+
 /** Shown to a model at this size: big enough to read a door arc, small enough to send quickly. */
 const CROP_SIDE = 512
 
-/** A square of the image as a PNG, base64-encoded without a data: prefix. `square` is in image pixels and may overhang the image. */
-export async function cropPng(url: string, square: { x: number; y: number; size: number }): Promise<string> {
+export interface Crop {
+  /** The part of the image to show, in image pixels. It may overhang the image. */
+  square: { x: number; y: number; size: number }
+  /** A rectangle to frame with red corner marks, in image pixels: what the question is about. */
+  mark: { x: number; y: number; width: number; height: number }
+}
+
+/** A square of the image as a PNG with the mark drawn on it, base64-encoded without a data: prefix. */
+export async function cropPng(url: string, { square, mark }: Crop): Promise<string> {
   const img = new Image()
   img.src = url
   await img.decode()
@@ -36,5 +46,19 @@ export async function cropPng(url: string, square: { x: number; y: number; size:
   ctx.fillRect(0, 0, CROP_SIDE, CROP_SIDE)
   const k = CROP_SIDE / square.size
   ctx.drawImage(img, -square.x * k, -square.y * k, img.naturalWidth * k, img.naturalHeight * k)
+  // Only the corners of the mark are drawn. A full outline crosses the wall at both ends of the
+  // gap, and reads as something drawn across an open doorway.
+  const [left, top, width, height] = [(mark.x - square.x) * k, (mark.y - square.y) * k, mark.width * k, mark.height * k]
+  ctx.strokeStyle = '#ff0000'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  for (const [x, dx] of [[left, 1], [left + width, -1]]) {
+    for (const [y, dy] of [[top, 1], [top + height, -1]]) {
+      ctx.moveTo(x + dx * width * ARM, y)
+      ctx.lineTo(x, y)
+      ctx.lineTo(x, y + dy * height * ARM)
+    }
+  }
+  ctx.stroke()
   return canvas.toDataURL('image/png').split(',')[1]
 }

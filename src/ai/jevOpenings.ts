@@ -10,16 +10,16 @@ export interface GapAnswer {
 }
 
 const KINDS: Record<GapKind, string> = {
-  door: 'A gap in a wall with a door: a thin line for the door leaf and a quarter-circle arc showing its swing.',
-  window: 'A gap in a wall filled with thin parallel lines or a thin rectangle: a window.',
-  opening: 'A plain gap in a wall with nothing drawn in it: an open doorway.',
-  none: 'An unbroken wall, with no gap.',
+  door: 'A door: the wall is interrupted, and a door is drawn there as a line with a quarter-circle swing arc, or as folding closet doors drawn as a zigzag or a pair of small arcs.',
+  window: 'A window: the wall is interrupted or thinned, and thin parallel lines or a narrow rectangle are drawn in line with the wall.',
+  opening: 'An open passage: the wall is interrupted and nothing is drawn across the gap.',
+  none: 'No opening: the wall continues unbroken, or the frame holds something else, such as stairs, a fixture or furniture.',
 }
 
 /** Any string that cannot occur in the instructions by accident; Jev swaps it for the image. */
 const IMAGE_REF = 'crop-image-5d1e8a'
 
-/** The request body that asks what the gap at the centre of a crop of the plan is. `pngBase64` has no data: prefix. */
+/** The request body that asks what the gap framed in red on a crop of the plan is. `pngBase64` has no data: prefix. */
 export function gapQuestion(pngBase64: string) {
   return {
     model: 'jev-latest',
@@ -29,7 +29,7 @@ export function gapQuestion(pngBase64: string) {
       kind: {
         type: 'choice',
         instructions:
-          'The image `crop` is part of an architectural floor plan. Thick black lines are walls. What does the crop show at its centre?',
+          'The image `crop` is part of an architectural floor plan. Black lines, thick or thin, are walls. Four red corner marks frame one stretch of one wall. What is on that stretch of wall, inside the frame?',
         criteria: KINDS,
       },
     },
