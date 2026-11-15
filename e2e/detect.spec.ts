@@ -1,5 +1,7 @@
+import type { Page } from '@playwright/test'
 import {
-  CALIBRATED, calibrate, colourAt, expect, planExtent, planToWorld, setView, test, topView, uploadPlan,
+  CALIBRATED, calibrate, click, colourAt, expect, fixture, planExtent, planInput, planToWorld, pressTool, settle, setView, test,
+  topView, uploadPlan,
 } from './helpers'
 
 test('detect the walls drawn on a plan, check them, and add them', async ({ app }) => {
@@ -19,7 +21,7 @@ test('detect the walls drawn on a plan, check them, and add them', async ({ app 
   expect(isOrange(await colourAt(app, onWall)), 'the drawn wall is black').toBe(false)
   await detect.click()
   // The outer rectangle, and the two walls of the inner room. The dimension line is not a wall.
-  await expect(app.getByTestId('detect-result')).toContainText('Found 6 walls')
+  await expect(app.getByTestId('detect-result')).toContainText('Found 6 walls, shown in orange.')
   expect(isOrange(await colourAt(app, onWall)), 'the suggestion is drawn over the wall').toBe(true)
   expect(isOrange(await colourAt(app, onDimension)), 'nothing over the dimension line').toBe(false)
   await expect(app.getByTestId('wall-count')).toBeHidden()
@@ -34,4 +36,77 @@ test('detect the walls drawn on a plan, check them, and add them', async ({ app 
   // The walls meet properly: they close the inner room and the L-shaped room around it.
   await expect(app.getByTestId('rooms')).toHaveText(/^Room 1.*Room 2.*Total/)
   await expect(app.locator('.room-label')).toHaveCount(2)
+})
+
+// fixtures/plan-openings.png: 1200 x 900 px at 100 px per metre. Three rooms; a door (leaf and arc) in the
+// bottom wall, a window in the right wall, and two plain openings in the partitions. A red line from
+// (100, 60) to (1100, 60) is labelled 10.0 m.
+async function detectOnOpeningsPlan(app: Page) {
+  await setView(app, 'Top')
+  await planInput(app).setInputFiles(fixture('plan-openings.png'))
+  await expect(app.getByTestId('plan-size')).toBeVisible()
+  await settle(app)
+  // Before calibration the plan is shown 20 m wide.
+  const at = await topView(app, { width: 20, depth: 15 })
+  const world = (px: number, py: number) => [((px - 600) * 20) / 1200, ((py - 450) * 20) / 1200] as const
+  await pressTool(app, 'Calibrate scale')
+  await click(app, at(...world(100, 60)))
+  await click(app, at(...world(1100, 60)))
+  await app.getByLabel('Real distance between the points').fill('10 m')
+  await app.getByRole('button', { name: 'Set scale' }).click()
+  await settle(app)
+  await app.getByRole('button', { name: 'Detect walls' }).click()
+  await expect(app.getByTestId('detect-result')).toContainText('Found 6 walls, shown in orange, with 4 gaps bridged.')
+}
+
+/** What Jev replies to the gap question. */
+const jevReply = (choice: string, confidence: number) => ({
+  model: 'jev-1.14.0',
+  answers: { kind: { type: 'choice', choice, confidence, probabilities: {} } },
+})
+
+test('gaps in detected walls are identified as doors and windows and added with the walls', async ({ app }) => {
+  // No network: the service's replies are played back. The first gap asked about is called a window,
+  // the next two doors, and the last an uncertain door.
+  const replies = [jevReply('window', 0.99), jevReply('door', 0.99), jevReply('opening', 0.95), jevReply('door', 0.4)]
+  const requests: { headers: Record<string, string>; body: any }[] = []
+  await app.route('**/jev', async (route) => {
+    requests.push({ headers: route.request().headers(), body: route.request().postDataJSON() })
+    await route.fulfill({ json: replies[requests.length - 1] })
+  })
+
+  await detectOnOpeningsPlan(app)
+  expect(requests, 'nothing is sent until asked').toHaveLength(0)
+
+  await app.getByRole('button', { name: 'Identify doors and windows' }).click()
+  // A plain opening counts as a door; the uncertain one is left alone.
+  await expect(app.getByTestId('identify-result')).toHaveText(
+    '2 doors (green) and 1 window (blue) will be added. 1 left as plain wall.',
+  )
+  expect(requests).toHaveLength(4)
+  for (const { headers, body } of requests) {
+    expect(headers['typesafe-danger-zone-images']).toBe('true')
+    expect(headers.authorization, 'the key is added by the server, not the browser').toBeUndefined()
+    const [image] = Object.values(body.assets) as { format: string; data_base64: string }[]
+    expect(image.format).toBe('png')
+    expect(image.data_base64.length).toBeGreaterThan(500)
+  }
+
+  await app.getByRole('button', { name: 'Add walls' }).click()
+  await expect(app.getByTestId('wall-count')).toHaveText('6')
+  await expect(app.getByTestId('opening-summary')).toHaveText('2 doors, 1 window')
+  await expect(app.locator('.room-label')).toHaveCount(3)
+})
+
+test('without the service, identifying fails with an explanation and the walls can still be added', async ({ page: app }) => {
+  // The plain page, not the `app` fixture: the browser logs the 404s itself, which that fixture would count as errors.
+  await app.goto('/')
+  await app.route('**/jev', (route) => route.fulfill({ status: 404, body: 'Not found' }))
+  await detectOnOpeningsPlan(app)
+  await app.getByRole('button', { name: 'Identify doors and windows' }).click()
+  await expect(app.getByTestId('identify-error')).toContainText("Couldn't identify the gaps: Jev request failed (404)")
+
+  await app.getByRole('button', { name: 'Add walls' }).click()
+  await expect(app.getByTestId('wall-count')).toHaveText('6')
+  await expect(app.getByTestId('opening-summary')).toBeHidden()
 })

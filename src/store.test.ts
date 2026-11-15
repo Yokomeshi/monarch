@@ -21,6 +21,9 @@ beforeEach(() => {
   useStore.setState({
     walls: [],
     suggestedWalls: null,
+    suggestedGaps: [],
+    suggestedGapCrops: [],
+    identifying: 'idle',
     openings: [],
     objects: [],
     sun: { ...DEFAULT_SUN },
@@ -441,6 +444,26 @@ describe('suggested walls', () => {
     store().discardSuggestedWalls()
     expect(store().walls).toEqual([])
     expect(store().suggestedWalls).toBeNull()
+  })
+
+  it('bring a door or window for each gap identified as one', () => {
+    const walls = suggestion() // the first is 4 m long
+    const gap = { wallId: walls[0].id, position: 2, width: 0.8, confidence: 0.95 }
+    useStore.setState({
+      suggestedWalls: walls,
+      suggestedGaps: [{ ...gap, kind: 'door' }, { ...gap, wallId: walls[1].id, position: 1.5, kind: null, confidence: 0 }],
+    })
+    store().acceptSuggestedWalls()
+    expect(store().openings).toMatchObject([{ wallId: walls[0].id, type: 'door', position: 2, width: 0.8 }])
+    expect(store().suggestedGaps).toEqual([])
+  })
+
+  it('forget the gaps when discarded', () => {
+    const walls = suggestion()
+    useStore.setState({ suggestedWalls: walls, suggestedGaps: [{ wallId: walls[0].id, position: 2, width: 0.8, kind: 'door', confidence: 1 }] })
+    store().discardSuggestedWalls()
+    expect(store().suggestedGaps).toEqual([])
+    expect(store().openings).toEqual([])
   })
 
   it('are not saved with the project', async () => {
