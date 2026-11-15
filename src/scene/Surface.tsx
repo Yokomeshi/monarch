@@ -7,24 +7,26 @@ import type { Material } from '../model/materials'
 interface Props {
   material: Material
   side?: Side
+  /** Which faces cast shadows. three.js's default is the faces turned away from the light. */
+  shadowSide?: Side
 }
 
 /** The three.js material for a wall, floor or ceiling. Expects the mesh's UVs to be in metres. */
-export function Surface({ material, side }: Props) {
+export function Surface({ material, side, shadowSide }: Props) {
   const textureUrl = useStore((s) => (material.textureId ? s.textures[material.textureId]?.url : undefined))
   const plain = (
-    <meshStandardMaterial color={material.color} roughness={material.roughness} metalness={material.metalness} side={side} />
+    <meshStandardMaterial color={material.color} roughness={material.roughness} metalness={material.metalness} side={side} shadowSide={shadowSide} />
   )
   if (!textureUrl) return plain
   // Show the plain colour while the photo loads.
   return (
     <Suspense fallback={plain}>
-      <Textured material={material} textureUrl={textureUrl} side={side} />
+      <Textured material={material} textureUrl={textureUrl} side={side} shadowSide={shadowSide} />
     </Suspense>
   )
 }
 
-function Textured({ material, textureUrl, side }: Props & { textureUrl: string }) {
+function Textured({ material, textureUrl, side, shadowSide }: Props & { textureUrl: string }) {
   const base = useLoader(TextureLoader, textureUrl)
   // UVs are in metres, so repeating every `tileSize` metres is a 1 / tileSize scale.
   // Cloned per surface: surfaces sharing a photo can have different tile sizes.
@@ -45,6 +47,7 @@ function Textured({ material, textureUrl, side }: Props & { textureUrl: string }
       roughness={material.roughness}
       metalness={material.metalness}
       side={side}
+      shadowSide={shadowSide}
     />
   )
 }

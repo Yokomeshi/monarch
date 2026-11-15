@@ -1,4 +1,4 @@
-import { click, colourAt, drawRoom, emptySpot, expect, field, settle, setView, test, topView, view3d } from './helpers'
+import { click, colourAt, drawRoom, emptySpot, expect, field, pressTool, settle, setView, test, topView, view3d } from './helpers'
 
 test('cutaway cuts the walls in the view so the rooms show, without changing the walls', async ({ app }) => {
   await drawRoom(app) // walls 2.7 m high
@@ -137,4 +137,81 @@ test('the sun study drives light and shadow, and is saved', async ({ app }, test
   await expect(field(app, 'Latitude')).toHaveValue('51.5')
   await expect(field(app, 'North')).toHaveValue('180')
   await expect(readout).toHaveText('The sun is 62° above the horizon, to the S.')
+})
+
+test('ceiling lights light a room at night, with brightness and colour, and are saved', async ({ app }, testInfo) => {
+  await drawRoom(app)
+  const top = await topView(app)
+  const spot = top(1.5, -1) // on the floor, 1.8 m from the light
+  const floor = () => colourAt(app, spot)
+  const mean = (c: number[]) => c.reduce((sum, v) => sum + v, 0) / 3
+
+  // Night, so the lights are all there is.
+  await app.getByLabel('Sun study').check()
+  await field(app, 'Time').fill('2')
+  const dark = mean(await floor())
+
+  await pressTool(app, 'Place ceiling light')
+  await click(app, top(0, 0))
+  await expect(app.getByTestId('light-summary')).toHaveText('1 light')
+  await expect(app.getByRole('heading', { name: 'Selected light' })).toBeVisible()
+  await expect(field(app, 'Brightness')).toHaveValue('800')
+  await expect(field(app, 'Colour')).toHaveValue('3000')
+  const lit = await floor()
+  expect(mean(lit) - dark, 'the light reaches the floor').toBeGreaterThan(25)
+
+  await field(app, 'Brightness').fill('200')
+  expect(mean(lit) - mean(await floor()), 'dimmer at 200 lm').toBeGreaterThan(15)
+  await field(app, 'Brightness').fill('800')
+
+  // Red minus blue: how warm the light on the floor looks.
+  const warmth = ([r, , b]: number[]) => r - b
+  await field(app, 'Colour').fill('2000')
+  const warm = warmth(await floor())
+  await field(app, 'Colour').fill('6500')
+  expect(warm - warmth(await floor()), 'warmer at 2000 K than at 6500 K').toBeGreaterThan(12)
+
+  // Click away, then click the fitting to select it again.
+  await click(app, top(8, 8))
+  await expect(app.getByRole('heading', { name: 'Selected light' })).toBeHidden()
+  await click(app, top(0, 0))
+  await expect(field(app, 'Colour')).toHaveValue('6500')
+
+  const path = testInfo.outputPath('lights.json')
+  const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Save…' }).click()])
+  await download.saveAs(path)
+
+  await app.keyboard.press('Delete')
+  await expect(app.getByTestId('light-summary')).toBeHidden()
+  expect(Math.abs(mean(await floor()) - dark), 'dark again without the light').toBeLessThan(10)
+
+  await app.getByTestId('project-input').setInputFiles(path)
+  await expect(app.getByTestId('light-summary')).toHaveText('1 light')
+  await setView(app, 'Top')
+  await click(app, top(0, 0))
+  await expect(field(app, 'Colour')).toHaveValue('6500')
+})
+
+test('a ceiling keeps the sun out of its room', async ({ app }) => {
+  await drawRoom(app) // the south wall is at z = +2
+  const top = await topView(app)
+  await pressTool(app, 'Place window')
+  await click(app, top(0, 2))
+  await click(app, top(8, 8))
+
+  // High summer sun from the south: the south wall's shadow is 1.4 m long.
+  await app.getByLabel('Sun study').check()
+  await field(app, 'Latitude').fill('51.5')
+  await field(app, 'Date').fill('172')
+  await field(app, 'Time').fill('12')
+
+  // From the 3D view's corner, this floor spot beyond the wall's shadow shows through the window.
+  await setView(app, '3D')
+  const at = await view3d(app)
+  const spot = at(-1.8, 0, 0.2)
+  const brightness = async () => (await colourAt(app, spot)).reduce((sum, c) => sum + c, 0) / 3
+  const open = await brightness()
+
+  await app.getByRole('button', { name: 'Ceilings' }).click()
+  expect(open - (await brightness()), 'in shade under the ceiling').toBeGreaterThan(20)
 })

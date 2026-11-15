@@ -6,6 +6,7 @@ import { RoomPanel } from './RoomPanel'
 import { OpeningPanel } from './OpeningPanel'
 import { ObjectPanel } from './ObjectPanel'
 import { SunPanel } from './SunPanel'
+import { LightPanel } from './LightPanel'
 import { LIBRARY, type ObjectKind } from '../model/objects'
 import { wallLength } from '../model/walls'
 import { WallPanel } from './WallPanel'
@@ -86,6 +87,7 @@ export function Sidebar() {
       <FurniturePanel />
       <RoomsPanel />
       <SunPanel />
+      <LightsPanel />
       <Inspector />
     </aside>
   )
@@ -304,14 +306,16 @@ function RoomsPanel() {
   )
 }
 
-/** Edits whatever is selected: furniture, a door or window, a room, or a wall. With nothing selected, the new-wall defaults. */
+/** Edits whatever is selected: furniture, a light, a door or window, a room, or a wall. With nothing selected, the new-wall defaults. */
 function Inspector() {
   const rooms = useRooms()
   const selectedRoomId = useStore((s) => s.selectedRoomId)
   const opening = useStore((s) => s.openings.find((o) => o.id === s.selectedOpeningId))
   const wall = useStore((s) => s.walls.find((w) => w.id === opening?.wallId))
   const object = useStore((s) => s.objects.find((o) => o.id === s.selectedObjectId))
+  const light = useStore((s) => s.lights.find((l) => l.id === s.selectedLightId))
   if (object) return <ObjectPanel object={object} />
+  if (light) return <LightPanel light={light} />
   if (opening && wall) return <OpeningPanel opening={opening} wall={wall} />
   const i = rooms.findIndex((r) => r.id === selectedRoomId)
   if (i < 0) return <WallPanel />
@@ -353,6 +357,38 @@ function OpeningsPanel() {
       {doors + windows > 0 && (
         <p className="hint" data-testid="opening-summary">
           {doors} {doors === 1 ? 'door' : 'doors'}, {windows} {windows === 1 ? 'window' : 'windows'}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function LightsPanel() {
+  const placing = useStore((s) => s.tool === 'light')
+  const count = useStore((s) => s.lights.length)
+  const setTool = useStore((s) => s.setTool)
+
+  useEffect(() => {
+    if (!placing) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setTool('none')
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [placing, setTool])
+
+  return (
+    <section>
+      <h2>Lights</h2>
+      {placing ? (
+        <>
+          <p className="hint">Click in the view to place the ceiling light. Esc cancels.</p>
+          <button onClick={() => setTool('none')}>Cancel</button>
+        </>
+      ) : (
+        <button onClick={() => setTool('light')}>Place ceiling light</button>
+      )}
+      {count > 0 && (
+        <p className="hint" data-testid="light-summary">
+          {count} {count === 1 ? 'light' : 'lights'}
         </p>
       )}
     </section>

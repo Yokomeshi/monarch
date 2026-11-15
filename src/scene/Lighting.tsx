@@ -43,6 +43,8 @@ export function Lighting() {
         shadow-camera-right={30}
         shadow-camera-top={30}
         shadow-camera-bottom={-30}
+        // Lit faces cast shadows too (see Walls); this keeps them from shading themselves.
+        shadow-normalBias={0.04}
       />
     </>
   )

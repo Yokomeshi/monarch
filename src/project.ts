@@ -4,14 +4,15 @@ import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materi
 import type { Wall, WallProps } from './model/walls'
 import type { Opening } from './model/openings'
 import { DEFAULT_SUN, type SunSettings } from './model/sun'
+import type { CeilingLight } from './model/lights'
 import { LIBRARY, type ModelInfo, type ObjectKind, type PlacedObject, type Size3 } from './model/objects'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
 // Version 2 added room floor and ceiling materials, version 3 openings, version 4
 // door hinge and swing sides, version 5 furniture, version 6 imported 3D models, and
-// version 7 the sun study. Older files still open.
-export const PROJECT_VERSION = 7
+// version 7 the sun study, and version 8 ceiling lights. Older files still open.
+export const PROJECT_VERSION = 8
 
 export interface ProjectFile {
   app: 'monarch'
@@ -33,6 +34,7 @@ export interface ProjectFile {
   /** Imported 3D model files by id. `data` is the file as a data URL. */
   models: Record<string, ModelInfo & { data: string }>
   sun: SunSettings
+  lights: CeilingLight[]
   wallDefaults: WallProps
   rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
@@ -105,6 +107,7 @@ export function parseProject(text: string): ProjectFile {
     objects: parseObjects(data.objects, textures, models),
     models,
     sun: parseSun(data.sun),
+    lights: parseLights(data.lights),
     wallDefaults,
     rooms,
     textures,
@@ -125,6 +128,21 @@ function parseSun(v: unknown): SunSettings {
     throw invalid('sun study')
   }
   return { enabled: v.enabled, latitude: v.latitude, day: v.day, hour: v.hour, north: v.north }
+}
+
+function parseLights(list: unknown): CeilingLight[] {
+  if (list === undefined) return [] // version 7 or older
+  if (!Array.isArray(list)) throw invalid('lights')
+  const lights = list.map((l, i): CeilingLight => {
+    const label = `light ${i + 1}`
+    if (!isObject(l) || typeof l.id !== 'string' || !l.id) throw invalid(label)
+    const { position } = l
+    if (!isObject(position) || !isFiniteNumber(position.x) || !isFiniteNumber(position.z)) throw invalid(`${label} position`)
+    if (!isPositive(l.lumens) || !isPositive(l.kelvin)) throw invalid(label)
+    return { id: l.id, position: { x: position.x, z: position.z }, lumens: l.lumens, kelvin: l.kelvin }
+  })
+  if (new Set(lights.map((l) => l.id)).size !== lights.length) throw invalid('lights (duplicate ids)')
+  return lights
 }
 
 function parseSize(size: unknown, label: string): Size3 {
