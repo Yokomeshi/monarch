@@ -108,7 +108,8 @@ describe('toIfc', () => {
     expect(ifc).toContain('IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)')
     expect(ifc).toContain('IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.)')
     expect(ifc).toContain('IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)')
-    expect(ifc).not.toMatch(/\d[eE][-+]?\d/) // no exponents
+    // No exponents in the numbers. Quoted text is left out: an id such as '2e7Xk...' is not a number.
+    expect(ifc.replace(/'[^']*'/g, "''")).not.toMatch(/\d[eE][-+]?\d/)
   })
 
   it('has one entity of each expected type per element', () => {

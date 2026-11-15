@@ -130,7 +130,7 @@ function cabinetParts(kind: CabinetKind, { width: W, depth: D, height: H }: Size
 const cabinet = (kind: CabinetKind, name: string, size: Size3, elevation?: number): Definition => ({
   name,
   size,
-  color: '#d8d4cc',
+  color: '#6f7f8c',
   roughness: 0.5,
   cabinet: DOORS,
   ...(elevation !== undefined && { elevation }),
