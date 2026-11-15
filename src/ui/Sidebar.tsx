@@ -258,6 +258,9 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
               )}
             </>
           )}
+          <p className="hint">
+            Click an orange wall to remove it from the suggestion{gaps.length > 0 && ', or a gap to change what it is: door, window or plain wall'}.
+          </p>
           <div className="row">
             <button onClick={accept}>Add walls</button>
             <button onClick={discard}>Discard</button>

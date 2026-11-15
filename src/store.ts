@@ -16,7 +16,7 @@ import { createLight, scaleLights, type CeilingLight } from './model/lights'
 import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
 import { detectPlan } from './plan/detectWalls'
 import { cropPng, readRaster } from './plan/readRaster'
-import { cropSquare, gapSuggestions, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
+import { cropSquare, gapSuggestions, MIN_CONFIDENCE, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
 import { askJev, JevError } from './ai/jevClient'
 import { gapQuestion, parseGapAnswer } from './ai/jevOpenings'
 import { detectOptions, toWalls } from './plan/suggestWalls'
@@ -126,6 +126,10 @@ interface State {
   /** Add the suggested walls to the model, with a door or window for each gap identified as one. */
   acceptSuggestedWalls: () => void
   discardSuggestedWalls: () => void
+  /** Drop one wall, and its gaps, from the suggestion. */
+  removeSuggestedWall: (id: string) => void
+  /** Set by hand what a suggested gap is: each call moves on through door, window, plain wall. */
+  cycleSuggestedGap: (index: number) => void
   setAccessPassword: (password: string) => void
   selectWall: (id: string | null) => void
   updateWall: (id: string, props: Partial<WallProps>) => void
@@ -366,6 +370,27 @@ export const useStore = create<State>()((set, get) => ({
     }),
 
   discardSuggestedWalls: () => set(NO_SUGGESTION),
+
+  removeSuggestedWall: (id) =>
+    set((s) => {
+      const keep = s.suggestedGaps.map((gap) => gap.wallId !== id)
+      return {
+        suggestedWalls: s.suggestedWalls && s.suggestedWalls.filter((w) => w.id !== id),
+        suggestedGaps: s.suggestedGaps.filter((_, i) => keep[i]),
+        suggestedGapCrops: s.suggestedGapCrops.filter((_, i) => keep[i]),
+      }
+    }),
+
+  cycleSuggestedGap: (index) =>
+    set((s) => ({
+      suggestedGaps: s.suggestedGaps.map((gap, i) => {
+        if (i !== index) return gap
+        // What the gap would become now decides what comes next. The user's word is certain.
+        const now = gap.confidence >= MIN_CONFIDENCE ? gap.kind : null
+        const kind = now === 'door' || now === 'opening' ? 'window' : now === 'window' ? 'none' : 'door'
+        return { ...gap, kind, confidence: 1 }
+      }),
+    })),
 
   setAccessPassword: (accessPassword) => {
     set({ accessPassword })
