@@ -14,6 +14,9 @@ import { inspectModelFile } from './model3d'
 import { DEFAULT_SUN, type SunSettings } from './model/sun'
 import { createLight, scaleLights, type CeilingLight } from './model/lights'
 import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
+import { detectWalls } from './plan/detectWalls'
+import { readRaster } from './plan/readRaster'
+import { detectOptions, toWalls } from './plan/suggestWalls'
 
 export interface Texture {
   url: string
@@ -50,6 +53,8 @@ interface State {
   /** The span the current scale was set from, kept on screen as a check. */
   calibrationLine: [Px, Px] | null
   walls: Wall[]
+  /** Walls detected in the plan image, waiting to be added or discarded. Null when there is no suggestion. */
+  suggestedWalls: Wall[] | null
   /** Doors and windows, each attached to a wall. */
   openings: Opening[]
   /** Height and thickness given to newly drawn walls. */
@@ -100,6 +105,11 @@ interface State {
   /** Turn the draft into walls. `close` adds a segment back to the first corner. */
   finishDraft: (close?: boolean) => void
   clearWalls: () => void
+  /** Find the walls drawn on the plan and offer them as a suggestion. */
+  suggestWalls: () => Promise<void>
+  /** Add the suggested walls to the model. */
+  acceptSuggestedWalls: () => void
+  discardSuggestedWalls: () => void
   selectWall: (id: string | null) => void
   updateWall: (id: string, props: Partial<WallProps>) => void
   deleteWall: (id: string) => void
@@ -173,6 +183,7 @@ export const useStore = create<State>()((set, get) => ({
   calibrationPoints: [],
   calibrationLine: null,
   walls: [],
+  suggestedWalls: null,
   openings: [],
   wallDefaults: { ...WALL_DEFAULTS },
   selectedWallId: null,
@@ -232,6 +243,7 @@ export const useStore = create<State>()((set, get) => ({
       calibrationPoints: [],
       calibrationLine: null,
       draft: [],
+      suggestedWalls: null,
       frameRequest: s.frameRequest + 1,
     }))
   },
@@ -250,6 +262,7 @@ export const useStore = create<State>()((set, get) => ({
       plan: { ...plan, metresPerPx: newScale, calibrated: true },
       // Walls traced over the plan stay on the drawing.
       walls: scaleWalls(walls, newScale / plan.metresPerPx),
+      suggestedWalls: null, // found at the old scale
       openings: scaleOpenings(s.openings, newScale / plan.metresPerPx),
       objects: scaleObjects(s.objects, newScale / plan.metresPerPx),
       lights: scaleLights(s.lights, newScale / plan.metresPerPx),
@@ -270,6 +283,20 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   clearWalls: () => set({ walls: [], openings: [], draft: [], selectedWallId: null, selectedOpeningId: null }),
+
+  suggestWalls: async () => {
+    const { plan, wallDefaults } = get()
+    if (!plan) return
+    const { raster, scale } = await readRaster(plan.url)
+    // The raster may be a shrunken copy of the plan: describe it as its own plan covering the same ground.
+    const frame = { widthPx: raster.width, heightPx: raster.height, metresPerPx: plan.metresPerPx / scale }
+    const detected = detectWalls(raster, detectOptions(frame.metresPerPx))
+    if (get().plan === plan) set({ suggestedWalls: toWalls(detected, frame, wallDefaults) })
+  },
+
+  acceptSuggestedWalls: () => set((s) => ({ walls: [...s.walls, ...(s.suggestedWalls ?? [])], suggestedWalls: null })),
+
+  discardSuggestedWalls: () => set({ suggestedWalls: null }),
 
   selectWall: (selectedWallId) => set({ ...NO_SELECTION, selectedWallId }),
 
@@ -477,6 +504,7 @@ export const useStore = create<State>()((set, get) => ({
       calibrationLine: file.plan?.calibrationLine ?? null,
       calibrationPoints: [],
       walls: file.walls,
+      suggestedWalls: null,
       openings: file.openings,
       objects: file.objects,
       models: Object.fromEntries(

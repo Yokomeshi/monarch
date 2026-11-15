@@ -13,6 +13,7 @@ import { Rooms } from './Rooms'
 import { Openings } from './Openings'
 import { Objects } from './Objects'
 import { Lights } from './Lights'
+import { SuggestedWalls } from './SuggestedWalls'
 
 // World units are metres; Y is up. The ground plane is y = 0.
 export function Scene() {
@@ -44,6 +45,7 @@ export function Scene() {
       )}
       <Rooms />
       <Walls />
+      <SuggestedWalls />
       <Openings />
       <Objects />
       <Lights />

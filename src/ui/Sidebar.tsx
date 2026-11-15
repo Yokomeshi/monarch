@@ -85,6 +85,7 @@ export function Sidebar() {
       </section>
 
       {plan && <CalibrationPanel />}
+      {plan && <DetectWallsPanel calibrated={plan.calibrated} />}
       <WallsPanel />
       <OpeningsPanel />
       <FurniturePanel />
@@ -166,6 +167,50 @@ function CalibrationPanel() {
             </button>
           </div>
         </form>
+      )}
+    </section>
+  )
+}
+
+/** Finds the walls drawn on the plan and offers them for adding. */
+function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
+  const suggested = useStore((s) => s.suggestedWalls)
+  const suggestWalls = useStore((s) => s.suggestWalls)
+  const accept = useStore((s) => s.acceptSuggestedWalls)
+  const discard = useStore((s) => s.discardSuggestedWalls)
+
+  return (
+    <section>
+      <h2>Detect walls</h2>
+      {!suggested ? (
+        <>
+          <p className="hint">
+            {calibrated
+              ? 'Finds solid dark walls that run straight across or up the plan. You check the result before it is added.'
+              : 'Set the scale first: detection needs to know how big the plan is.'}
+          </p>
+          <button disabled={!calibrated} onClick={suggestWalls}>
+            Detect walls
+          </button>
+        </>
+      ) : suggested.length === 0 ? (
+        <>
+          <p className="hint" data-testid="detect-result">
+            No walls found. Detection needs solid dark walls that run straight across or up the plan.
+          </p>
+          <button onClick={discard}>OK</button>
+        </>
+      ) : (
+        <>
+          <p className="hint" data-testid="detect-result">
+            Found {suggested.length} {suggested.length === 1 ? 'wall' : 'walls'}, shown in orange. Doors and windows are
+            bridged; add them afterwards.
+          </p>
+          <div className="row">
+            <button onClick={accept}>Add walls</button>
+            <button onClick={discard}>Discard</button>
+          </div>
+        </>
       )}
     </section>
   )

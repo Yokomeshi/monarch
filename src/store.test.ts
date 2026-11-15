@@ -4,7 +4,7 @@ import { blockGlb, crateObj } from './testModels'
 import { DEFAULT_SUN } from './model/sun'
 import { DEFAULT_RATES } from './model/cost'
 import { wallFootprints } from './model/wallGeometry'
-import { WALL_DEFAULTS } from './model/walls'
+import { createWall, WALL_DEFAULTS } from './model/walls'
 import { applyPreset, DEFAULT_MATERIAL, PRESETS, ROOM_DEFAULTS } from './model/materials'
 
 const p = (x: number, z: number) => ({ x, z })
@@ -20,6 +20,7 @@ function drawL() {
 beforeEach(() => {
   useStore.setState({
     walls: [],
+    suggestedWalls: null,
     openings: [],
     objects: [],
     sun: { ...DEFAULT_SUN },
@@ -421,6 +422,32 @@ describe('ceiling lights', () => {
     store().loadProject(text)
     expect(store().lights).toEqual([{ ...light, kelvin: 6000 }])
     expect(store().selectedLightId).toBeNull()
+  })
+})
+
+describe('suggested walls', () => {
+  const suggestion = () => [createWall(p(0, 0), p(4, 0)), createWall(p(4, 0), p(4, 3))]
+
+  it('are added to the walls already there when accepted', () => {
+    const drawn = drawL()
+    useStore.setState({ suggestedWalls: suggestion() })
+    store().acceptSuggestedWalls()
+    expect(store().walls).toHaveLength(drawn.length + 2)
+    expect(store().suggestedWalls).toBeNull()
+  })
+
+  it('leave the walls alone when discarded', () => {
+    useStore.setState({ suggestedWalls: suggestion() })
+    store().discardSuggestedWalls()
+    expect(store().walls).toEqual([])
+    expect(store().suggestedWalls).toBeNull()
+  })
+
+  it('are not saved with the project', async () => {
+    useStore.setState({ suggestedWalls: suggestion() })
+    store().loadProject(await store().saveProject())
+    expect(store().walls).toEqual([])
+    expect(store().suggestedWalls).toBeNull()
   })
 })
 
