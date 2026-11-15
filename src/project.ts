@@ -5,14 +5,15 @@ import type { Wall, WallProps } from './model/walls'
 import type { Opening } from './model/openings'
 import { DEFAULT_SUN, type SunSettings } from './model/sun'
 import type { CeilingLight } from './model/lights'
+import { DEFAULT_RATES, parseRates, type CostRates } from './model/cost'
 import { LIBRARY, type ModelInfo, type ObjectKind, type PlacedObject, type Size3 } from './model/objects'
 import type { Px } from './plan/geometry'
 import type { Units } from './units'
 
 // Version 2 added room floor and ceiling materials, version 3 openings, version 4
 // door hinge and swing sides, version 5 furniture, version 6 imported 3D models, and
-// version 7 the sun study, and version 8 ceiling lights. Older files still open.
-export const PROJECT_VERSION = 8
+// version 7 the sun study, version 8 ceiling lights, and version 9 cost rates. Older files still open.
+export const PROJECT_VERSION = 9
 
 export interface ProjectFile {
   app: 'monarch'
@@ -35,6 +36,7 @@ export interface ProjectFile {
   models: Record<string, ModelInfo & { data: string }>
   sun: SunSettings
   lights: CeilingLight[]
+  costRates: CostRates
   wallDefaults: WallProps
   rooms: RoomFinishes
   /** Photo textures by id. `image` is a data URL. */
@@ -108,6 +110,7 @@ export function parseProject(text: string): ProjectFile {
     models,
     sun: parseSun(data.sun),
     lights: parseLights(data.lights),
+    costRates: parseCostRates(data.costRates),
     wallDefaults,
     rooms,
     textures,
@@ -128,6 +131,13 @@ function parseSun(v: unknown): SunSettings {
     throw invalid('sun study')
   }
   return { enabled: v.enabled, latitude: v.latitude, day: v.day, hour: v.hour, north: v.north }
+}
+
+function parseCostRates(v: unknown): CostRates {
+  if (v === undefined) return { ...DEFAULT_RATES } // version 8 or older
+  const rates = parseRates(v)
+  if (!rates) throw invalid('cost rates')
+  return rates
 }
 
 function parseLights(list: unknown): CeilingLight[] {

@@ -13,6 +13,7 @@ import {
 import { inspectModelFile } from './model3d'
 import { DEFAULT_SUN, type SunSettings } from './model/sun'
 import { createLight, scaleLights, type CeilingLight } from './model/lights'
+import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
 
 export interface Texture {
   url: string
@@ -76,6 +77,8 @@ interface State {
   /** Ceiling lights. */
   lights: CeilingLight[]
   selectedLightId: string | null
+  /** Unit rates for the cost estimate. */
+  costRates: CostRates
   showFloors: boolean
   showCeilings: boolean
   /** Draw walls cut off low, so the rooms can be seen into. Display only. */
@@ -134,6 +137,7 @@ interface State {
   selectLight: (id: string | null) => void
   updateLight: (id: string, patch: Partial<CeilingLight>) => void
   deleteLight: (id: string) => void
+  setCostRate: (key: CostKey, rate: number) => void
   setShowFloors: (show: boolean) => void
   setShowCeilings: (show: boolean) => void
   setCutaway: (on: boolean) => void
@@ -185,6 +189,7 @@ export const useStore = create<State>()((set, get) => ({
   sun: { ...DEFAULT_SUN },
   lights: [],
   selectedLightId: null,
+  costRates: { ...DEFAULT_RATES },
   showFloors: true,
   showCeilings: false,
   cutaway: false,
@@ -375,6 +380,8 @@ export const useStore = create<State>()((set, get) => ({
       lights: s.lights.filter((l) => l.id !== id),
       selectedLightId: s.selectedLightId === id ? null : s.selectedLightId,
     })),
+  setCostRate: (key, rate) => set((s) => ({ costRates: { ...s.costRates, [key]: rate } })),
+
   setShowFloors: (showFloors) => set({ showFloors }),
   setShowCeilings: (showCeilings) => set({ showCeilings }),
   setCutaway: (cutaway) => set({ cutaway }),
@@ -413,7 +420,7 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   saveProject: async () => {
-    const { units, plan, calibrationLine, walls, openings, objects, sun, lights, wallDefaults, textures, roomDefaults, roomMaterials } =
+    const { units, plan, calibrationLine, walls, openings, objects, sun, lights, costRates, wallDefaults, textures, roomDefaults, roomMaterials } =
       get()
     const rooms = { defaults: roomDefaults, materials: roomMaterials }
     const file: ProjectFile = {
@@ -435,6 +442,7 @@ export const useStore = create<State>()((set, get) => ({
       models: {},
       sun,
       lights,
+      costRates,
       wallDefaults,
       rooms,
       textures: {},
@@ -477,6 +485,7 @@ export const useStore = create<State>()((set, get) => ({
       placingModelId: null,
       sun: file.sun,
       lights: file.lights,
+      costRates: file.costRates,
       wallDefaults: file.wallDefaults,
       roomDefaults: file.rooms.defaults,
       roomMaterials: file.rooms.materials,

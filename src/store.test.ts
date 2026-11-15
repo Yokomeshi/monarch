@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './store'
 import { blockGlb, crateObj } from './testModels'
 import { DEFAULT_SUN } from './model/sun'
+import { DEFAULT_RATES } from './model/cost'
 import { wallFootprints } from './model/wallGeometry'
 import { WALL_DEFAULTS } from './model/walls'
 import { applyPreset, DEFAULT_MATERIAL, PRESETS, ROOM_DEFAULTS } from './model/materials'
@@ -24,6 +25,7 @@ beforeEach(() => {
     sun: { ...DEFAULT_SUN },
     lights: [],
     selectedLightId: null,
+    costRates: { ...DEFAULT_RATES },
     models: {},
     placingModelId: null,
     selectedObjectId: null,
@@ -419,6 +421,18 @@ describe('ceiling lights', () => {
     store().loadProject(text)
     expect(store().lights).toEqual([{ ...light, kelvin: 6000 }])
     expect(store().selectedLightId).toBeNull()
+  })
+})
+
+describe('cost rates', () => {
+  it('start at the defaults, change one at a time, and are saved with the project', async () => {
+    expect(store().costRates).toEqual(DEFAULT_RATES)
+    store().setCostRate('door', 525)
+    expect(store().costRates).toEqual({ ...DEFAULT_RATES, door: 525 })
+    const text = await store().saveProject()
+    store().setCostRate('door', 1)
+    store().loadProject(text)
+    expect(store().costRates.door).toBe(525)
   })
 })
 

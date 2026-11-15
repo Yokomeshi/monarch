@@ -63,7 +63,7 @@ export function parseLength(input: string, units: Units): number | null {
   return null
 }
 
-const SQ_METRES_PER_SQ_FOOT = METRES_PER_FOOT * METRES_PER_FOOT
+export const SQ_METRES_PER_SQ_FOOT = METRES_PER_FOOT * METRES_PER_FOOT
 
 export function formatArea(squareMetres: number, units: Units): string {
   if (units === 'metric') return `${squareMetres.toFixed(2)} m²`
