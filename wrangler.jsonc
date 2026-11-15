@@ -1,0 +1,7 @@
+// Cloudflare Workers deployment: the built site as static assets, plus worker/index.ts for /jev.
+{
+  "name": "monarch",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "./dist", "binding": "ASSETS" }
+}
