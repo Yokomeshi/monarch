@@ -12,6 +12,7 @@ export function ViewToolbar() {
   const setCutaway = useStore((s) => s.setCutaway)
   const walking = useStore((s) => s.tool === 'walk')
   const setTool = useStore((s) => s.setTool)
+  const requestCapture = useStore((s) => s.requestCapture)
 
   return (
     <div className="view-toolbar">
@@ -55,6 +56,14 @@ export function ViewToolbar() {
         ))}
       </div>
       <button onClick={requestFrame}>Frame plan</button>
+      <button title="Save the current view as a large image" onClick={() => requestCapture('image')}>
+        Save image
+      </button>
+      {walking && (
+        <button title="Save a 360° panorama from where you stand, for a panorama viewer or headset" onClick={() => requestCapture('panorama')}>
+          Save 360°
+        </button>
+      )}
     </div>
   )
 }

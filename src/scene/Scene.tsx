@@ -14,6 +14,7 @@ import { Openings } from './Openings'
 import { Objects } from './Objects'
 import { Lights } from './Lights'
 import { SuggestedWalls } from './SuggestedWalls'
+import { Capture } from './Capture'
 
 // World units are metres; Y is up. The ground plane is y = 0.
 export function Scene() {
@@ -24,6 +25,7 @@ export function Scene() {
   return (
     <Canvas shadows="percentage" onPointerMissed={() => selectWall(null)}>
       <CameraRig />
+      <Capture />
       <color attach="background" args={['#1b1d21']} />
       <Lighting />
       <Grid
