@@ -54,8 +54,31 @@ export function cropSquare(gap: DetectedGap, wall: DetectedWall, metresPerPx: nu
   }
 }
 
-/** Below this confidence an identification is not acted on. */
-export const MIN_CONFIDENCE = 0.8
+
+/**
+ * The rectangle that marks a gap on the crop, in image pixels, so the model knows which stretch
+ * of which wall is meant: a crop often shows several walls and openings.
+ */
+export function gapMark(gap: DetectedGap, wall: DetectedWall): { x: number; y: number; width: number; height: number } {
+  const length = pixelDistance(wall.start, wall.end)
+  const along = { x: (wall.end.x - wall.start.x) / length, y: (wall.end.y - wall.start.y) / length }
+  const from = { x: wall.start.x + along.x * gap.start, y: wall.start.y + along.y * gap.start }
+  const span = gap.end - gap.start
+  // To each side of the wall: clear of a thick wall's faces, and half the gap's width, which takes in most of a door's swing.
+  const reach = Math.max(wall.thickness * 0.75, span / 2)
+  // Walls are horizontal or vertical, so the mark is an upright rectangle.
+  const horizontal = Math.abs(along.x) > Math.abs(along.y)
+  return horizontal
+    ? { x: Math.min(from.x, from.x + along.x * span), y: from.y - reach, width: span, height: 2 * reach }
+    : { x: from.x - reach, y: Math.min(from.y, from.y + along.y * span), width: 2 * reach, height: span }
+}
+
+/**
+ * Below this confidence an identification is not acted on. On a real scanned plan Jev's right
+ * answers came with confidence from about 0.45 to 0.8, so a stricter limit would discard most of them;
+ * the user checks the result, and can change any gap with a click.
+ */
+export const MIN_CONFIDENCE = 0.5
 
 /** Doors and windows for the identified gaps, ready to add with the walls. */
 export function openingsFromGaps(suggestions: GapSuggestion[], walls: Wall[]): Opening[] {

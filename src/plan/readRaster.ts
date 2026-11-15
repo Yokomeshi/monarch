@@ -24,8 +24,15 @@ export async function readRaster(url: string): Promise<{ raster: Raster; scale: 
 /** Shown to a model at this size: big enough to read a door arc, small enough to send quickly. */
 const CROP_SIDE = 512
 
-/** A square of the image as a PNG, base64-encoded without a data: prefix. `square` is in image pixels and may overhang the image. */
-export async function cropPng(url: string, square: { x: number; y: number; size: number }): Promise<string> {
+export interface Crop {
+  /** The part of the image to show, in image pixels. It may overhang the image. */
+  square: { x: number; y: number; size: number }
+  /** A rectangle to outline in red, in image pixels: what the question is about. */
+  mark: { x: number; y: number; width: number; height: number }
+}
+
+/** A square of the image as a PNG with the mark drawn on it, base64-encoded without a data: prefix. */
+export async function cropPng(url: string, { square, mark }: Crop): Promise<string> {
   const img = new Image()
   img.src = url
   await img.decode()
@@ -36,5 +43,8 @@ export async function cropPng(url: string, square: { x: number; y: number; size:
   ctx.fillRect(0, 0, CROP_SIDE, CROP_SIDE)
   const k = CROP_SIDE / square.size
   ctx.drawImage(img, -square.x * k, -square.y * k, img.naturalWidth * k, img.naturalHeight * k)
+  ctx.strokeStyle = '#ff0000'
+  ctx.lineWidth = 3
+  ctx.strokeRect((mark.x - square.x) * k, (mark.y - square.y) * k, mark.width * k, mark.height * k)
   return canvas.toDataURL('image/png').split(',')[1]
 }

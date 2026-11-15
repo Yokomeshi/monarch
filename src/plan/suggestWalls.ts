@@ -13,7 +13,7 @@ export function detectOptions(metresPerPx: number): DetectOptions {
   return {
     minThickness: 4,
     minLength: 0.5 / metresPerPx, // nothing shorter than half a metre is a wall worth tracing
-    maxGap: 1.2 / metresPerPx, // doors and windows are drawn as gaps; a wider gap is a real break
+    maxGap: 2.5 / metresPerPx, // doors and windows are drawn as gaps, and a window can be this wide; a wider gap is a real break
   }
 }
 

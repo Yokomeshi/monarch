@@ -15,8 +15,8 @@ import { DEFAULT_SUN, type SunSettings } from './model/sun'
 import { createLight, scaleLights, type CeilingLight } from './model/lights'
 import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
 import { detectPlan } from './plan/detectWalls'
-import { cropPng, readRaster } from './plan/readRaster'
-import { cropSquare, gapSuggestions, MIN_CONFIDENCE, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
+import { cropPng, readRaster, type Crop } from './plan/readRaster'
+import { cropSquare, gapMark, gapSuggestions, MIN_CONFIDENCE, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
 import { askJev, JevError } from './ai/jevClient'
 import { gapQuestion, parseGapAnswer } from './ai/jevOpenings'
 import { detectOptions, toWalls } from './plan/suggestWalls'
@@ -63,8 +63,8 @@ interface State {
   suggestedWalls: Wall[] | null
   /** Gaps in the suggested walls: doors and windows, once identified. */
   suggestedGaps: GapSuggestion[]
-  /** For each suggested gap, the square of the plan image (in its own pixels) that shows it. */
-  suggestedGapCrops: { x: number; y: number; size: number }[]
+  /** For each suggested gap, the part of the plan image (in its own pixels) that shows it, and the gap marked on it. */
+  suggestedGapCrops: Crop[]
   /** 'busy' while the gaps are being identified; a message if that failed. */
   identifying: 'idle' | 'busy' | { error: string; needsPassword: boolean }
   /** The hosted app's shared access password for the door and window service. Kept in this browser. */
@@ -332,8 +332,13 @@ export const useStore = create<State>()((set, get) => ({
       suggestedGaps: gapSuggestions(gaps, suggestedWalls, frame.metresPerPx),
       // Squares are found on the raster; the crop is cut from the full image.
       suggestedGapCrops: gaps.map((gap) => {
-        const { x, y, size } = cropSquare(gap, detected.walls[gap.wall], frame.metresPerPx)
-        return { x: x / scale, y: y / scale, size: size / scale }
+        const wall = detected.walls[gap.wall]
+        const { x, y, size } = cropSquare(gap, wall, frame.metresPerPx)
+        const mark = gapMark(gap, wall)
+        return {
+          square: { x: x / scale, y: y / scale, size: size / scale },
+          mark: { x: mark.x / scale, y: mark.y / scale, width: mark.width / scale, height: mark.height / scale },
+        }
       }),
     })
   },
@@ -344,9 +349,10 @@ export const useStore = create<State>()((set, get) => ({
     set({ identifying: 'busy' })
     try {
       const answers = await Promise.all(
-        suggestedGapCrops.map(async (square) => parseGapAnswer(await askJev(gapQuestion(await cropPng(plan.url, square)), accessPassword))),
+        suggestedGapCrops.map(async (crop) => parseGapAnswer(await askJev(gapQuestion(await cropPng(plan.url, crop)), accessPassword))),
       )
       if (get().suggestedGaps !== suggestedGaps) return // discarded or redone meanwhile
+      if (answers.every((a) => a === null)) throw new Error("Jev's replies could not be read")
       set({
         identifying: 'idle',
         // A reply that can't be read leaves its gap unidentified.

@@ -459,17 +459,18 @@ describe('suggested walls', () => {
   })
 
   it('lose one wall and its gaps when it is removed', () => {
+    const crop = (at: number) => ({ square: { x: at, y: at, size: 10 }, mark: { x: at, y: at, width: 2, height: 2 } })
     const walls = suggestion()
     const gap = { position: 1, width: 0.8, kind: null, confidence: 0 }
     useStore.setState({
       suggestedWalls: walls,
       suggestedGaps: [{ ...gap, wallId: walls[0].id }, { ...gap, wallId: walls[1].id }],
-      suggestedGapCrops: [{ x: 0, y: 0, size: 10 }, { x: 5, y: 5, size: 10 }],
+      suggestedGapCrops: [crop(0), crop(5)],
     })
     store().removeSuggestedWall(walls[0].id)
     expect(store().suggestedWalls).toEqual([walls[1]])
     expect(store().suggestedGaps).toEqual([{ ...gap, wallId: walls[1].id }])
-    expect(store().suggestedGapCrops).toEqual([{ x: 5, y: 5, size: 10 }])
+    expect(store().suggestedGapCrops).toEqual([crop(5)])
   })
 
   it('let a gap be set by hand: door, then window, then plain wall, then door again', () => {

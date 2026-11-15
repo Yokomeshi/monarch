@@ -4,7 +4,7 @@ import { WALL_DEFAULTS } from '../model/walls'
 
 describe('detectOptions', () => {
   it('keeps the thickness limit in pixels and turns real sizes into pixels', () => {
-    expect(detectOptions(0.01)).toEqual({ minThickness: 4, minLength: 50, maxGap: 120 })
+    expect(detectOptions(0.01)).toEqual({ minThickness: 4, minLength: 50, maxGap: 250 })
     expect(detectOptions(0.02).minLength).toBe(25)
   })
 })

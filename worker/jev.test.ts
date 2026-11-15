@@ -122,3 +122,15 @@ describe('onRequestPost', () => {
     await expectError(response, 502)
   })
 })
+
+describe('when Jev refuses the key', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it.each([401, 403])('turns a %i from Jev into a 502 that says so, since 401 means a wrong password to the app', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"detail":{"error_type":"authentication_error"}}', { status })))
+    const request = new Request('https://monarch.example/jev', { method: 'POST', headers: { 'X-App-Password': 'open sesame' }, body: '{}' })
+    const response = await onRequestPost({ request, env: { TYPESAFE_API_KEY: 'key', APP_PASSWORD: 'open sesame' } })
+    expect(response.status).toBe(502)
+    expect(await response.json()).toEqual({ error: "Jev did not accept the server's API key." })
+  })
+})

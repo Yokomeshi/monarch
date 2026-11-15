@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MIN_CONFIDENCE, cropSquare, gapSuggestions, openingGaps, openingsFromGaps, type GapSuggestion } from './suggestOpenings'
+import { MIN_CONFIDENCE, cropSquare, gapMark, gapSuggestions, openingGaps, openingsFromGaps, type GapSuggestion } from './suggestOpenings'
 import { createWall } from '../model/walls'
 
 describe('openingGaps', () => {
@@ -38,6 +38,25 @@ describe('gapSuggestions', () => {
 
   it('finds nothing where there are no gaps', () => {
     expect(gapSuggestions([], walls, 0.01)).toEqual([])
+  })
+})
+
+describe('gapMark', () => {
+  const gap = { wall: 0, start: 200, end: 320 }
+
+  it('boxes the gap along a horizontal wall, reaching half the gap width to each side', () => {
+    const wall = { start: { x: 100, y: 500 }, end: { x: 900, y: 500 }, thickness: 12 }
+    expect(gapMark(gap, wall)).toEqual({ x: 300, y: 440, width: 120, height: 120 })
+  })
+
+  it('boxes the gap along a vertical wall', () => {
+    const wall = { start: { x: 400, y: 100 }, end: { x: 400, y: 700 }, thickness: 20 }
+    expect(gapMark(gap, wall)).toEqual({ x: 340, y: 300, width: 120, height: 120 })
+  })
+
+  it('stays clear of the faces of a wall thicker than the gap is wide', () => {
+    const wall = { start: { x: 400, y: 100 }, end: { x: 400, y: 700 }, thickness: 200 }
+    expect(gapMark(gap, wall)).toEqual({ x: 250, y: 300, width: 300, height: 120 })
   })
 })
 
@@ -103,9 +122,9 @@ describe('openingsFromGaps', () => {
   })
 
   it('acts only on confident identifications', () => {
-    expect(MIN_CONFIDENCE).toBe(0.8)
-    expect(openingsFromGaps([gap({ confidence: 0.79 })], [wall])).toEqual([])
-    expect(openingsFromGaps([gap({ confidence: 0.8 })], [wall])).toHaveLength(1)
+    expect(MIN_CONFIDENCE).toBe(0.5)
+    expect(openingsFromGaps([gap({ confidence: 0.49 })], [wall])).toEqual([])
+    expect(openingsFromGaps([gap({ confidence: 0.5 })], [wall])).toHaveLength(1)
   })
 
   it('puts two openings on one wall', () => {
