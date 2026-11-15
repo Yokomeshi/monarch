@@ -1,4 +1,4 @@
-// The hosted app's route to TypeSafe's Jev API, as a Cloudflare Pages Function answering at /jev.
+// The hosted app's route to TypeSafe's Jev API: what worker/index.ts runs for a POST to /jev.
 // Jev refuses calls made from a browser and the key must not be in one, so the browser posts here
 // and this adds the key. A shared password keeps strangers from spending the owner's credits.
 // In local development the /jev proxy in vite.config.ts does this job instead.
@@ -30,7 +30,7 @@ function sameText(a: string, b: string): boolean {
   return difference === 0
 }
 
-/** Pages calls this for POST /jev; other methods get Cloudflare's own 405. */
+/** Answers a POST to /jev. */
 export async function onRequestPost(context: { request: Request; env: Env }): Promise<Response> {
   const { request, env } = context
   const key = env.TYPESAFE_API_KEY

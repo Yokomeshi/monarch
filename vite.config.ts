@@ -22,6 +22,6 @@ export default defineConfig(({ mode }) => {
     server: { proxy: jev },
     preview: { proxy: jev },
     // Unit tests only; the browser tests in e2e/ run with Playwright.
-    test: { include: ['src/**/*.test.ts', 'functions/**/*.test.ts']},
+    test: { include: ['src/**/*.test.ts', 'worker/**/*.test.ts'] },
   }
 })

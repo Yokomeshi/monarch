@@ -9,7 +9,7 @@ export class JevError extends Error {
 
 /**
  * Send a request to Jev through the app's own server, which holds the key: the dev server
- * (see vite.config.ts) or the hosted function (functions/jev.ts), which also asks for the
+ * (see vite.config.ts) or the hosted worker (worker/jev.ts), which also asks for the
  * access password. Throws if there is no such route, as on a static host, or the service refuses.
  */
 export async function askJev(body: unknown, password: string): Promise<unknown> {
