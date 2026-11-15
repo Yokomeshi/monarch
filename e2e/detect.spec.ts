@@ -8,7 +8,7 @@ test('detect the walls drawn on a plan, check them, and add them', async ({ app 
   const detect = app.getByRole('button', { name: 'Detect walls' })
   await expect(detect, 'needs the scale first').toBeDisabled()
 
-  await calibrate(app, `10'`)
+  await calibrate(app, '3.048 m') // the plan's marks are 10 ft apart
   const at = await topView(app, planExtent(CALIBRATED))
   const world = planToWorld(CALIBRATED)
   // On the plan's top wall, and on its red dimension line.
