@@ -21,7 +21,7 @@ export function CostPanel() {
           <tr>
             <th>Item</th>
             <th>Quantity</th>
-            <th>Rate per {units === 'metric' ? 'm²' : 'sq ft'} or each</th>
+            <th>Rate</th>
             <th>Cost</th>
           </tr>
         </thead>
@@ -56,8 +56,8 @@ export function CostPanel() {
         </tfoot>
       </table>
       <p className="hint">
-        The starting rates are placeholders, not market prices: enter your own. Amounts are in whatever currency the
-        rates are in. Furniture is not included.
+        Rates are per {units === 'metric' ? 'm²' : 'sq ft'} for walls, floors and ceilings, and each for the rest. The
+        starting rates are placeholders, not market prices: enter your own, in any currency. Furniture is not included.
       </p>
     </section>
   )

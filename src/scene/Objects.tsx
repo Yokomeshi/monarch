@@ -4,6 +4,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber'
 import { Edges } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useStore } from '../store'
+import { useClashes } from '../useClashes'
 import { objectParts, type PlacedObject } from '../model/objects'
 import { snapToWalls } from '../model/objectSnap'
 import { Surface } from './Surface'
@@ -20,11 +21,14 @@ export function Objects() {
   const selectedObjectId = useStore((s) => s.selectedObjectId)
   const tool = useStore((s) => s.tool)
   const placeObject = useStore((s) => s.placeObject)
+  const clashes = useClashes()
+  // The first id of every clash is a piece of furniture; in a furniture pair, so is the second.
+  const clashing = new Set(clashes.flatMap((c) => (c.kind === 'furniture-furniture' ? c.ids : [c.ids[0]])))
 
   return (
     <group>
       {objects.map((o) => (
-        <ObjectModel key={o.id} object={o} selected={o.id === selectedObjectId} interactive={tool === 'none'} />
+        <ObjectModel key={o.id} object={o} selected={o.id === selectedObjectId} clashing={clashing.has(o.id)} interactive={tool === 'none'} />
       ))}
       {tool === 'object' && (
         // Invisible, so a click anywhere on the ground places the piece.
@@ -45,7 +49,15 @@ export function Objects() {
   )
 }
 
-function ObjectModel({ object, selected, interactive }: { object: PlacedObject; selected: boolean; interactive: boolean }) {
+interface ObjectModelProps {
+  object: PlacedObject
+  selected: boolean
+  /** In the way of other furniture, a wall or a door. */
+  clashing: boolean
+  interactive: boolean
+}
+
+function ObjectModel({ object, selected, clashing, interactive }: ObjectModelProps) {
   const selectObject = useStore((s) => s.selectObject)
   const updateObject = useStore((s) => s.updateObject)
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null
@@ -95,6 +107,8 @@ function ObjectModel({ object, selected, interactive }: { object: PlacedObject; 
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         {selected ? (
           <Edges color="#36c5f0" lineWidth={3} />
+        ) : clashing ? (
+          <Edges color="#ff6b6b" lineWidth={2.5} />
         ) : (
           // In Top view a piece can match the floor under it, so every piece gets a plan-style outline.
           topView && <Edges color="#2b2f36" lineWidth={1.5} />

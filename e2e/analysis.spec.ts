@@ -71,3 +71,33 @@ test('the cost estimate multiplies quantities by editable rates, and the rates a
   await expect(wallRate).toHaveValue('100')
   await expect(cost('wall')).toHaveText('5,211')
 })
+
+test('checks list furniture that overlaps, runs into a wall or blocks a door', async ({ app }) => {
+  await drawRoom(app)
+  const top = await topView(app)
+  const place = async (piece: string, x: number, z: number) => {
+    await pressTool(app, piece)
+    await click(app, top(x, z))
+  }
+  const problems = app.getByTestId('checks').getByRole('button')
+
+  await expect(app.getByRole('heading', { name: 'Checks' })).toBeHidden()
+  await place('Bed', -1.5, 0)
+  await expect(app.getByTestId('checks-ok')).toHaveText('No problems found.')
+
+  await place('Sofa', -1.5, 0.3)
+  await expect(problems).toHaveText(['Bed overlaps sofa'])
+
+  // The door on the south wall opens into the room; the chair stands where the leaf swings.
+  await pressTool(app, 'Place door')
+  await click(app, top(0, 2))
+  await place('Chair', 0.2, 1.4)
+  await place('Wardrobe', 2, -2) // centred on the north wall
+  await expect(problems).toHaveText(['Bed overlaps sofa', 'Wardrobe runs into a wall', 'Chair blocks a door'])
+
+  // Clicking a problem selects the piece; deleting it clears the problem.
+  await problems.nth(1).click()
+  await expect(app.getByRole('heading', { name: 'Selected wardrobe' })).toBeVisible()
+  await app.getByRole('button', { name: 'Delete wardrobe' }).click()
+  await expect(problems).toHaveText(['Bed overlaps sofa', 'Chair blocks a door'])
+})

@@ -402,6 +402,7 @@ section > button + .hint {
   padding: 3px 4px 3px 0;
   text-align: right;
   font-weight: normal;
+  white-space: nowrap;
 }
 
 .cost th:first-child {
@@ -414,7 +415,7 @@ section > button + .hint {
 }
 
 .cost input {
-  width: 64px;
+  width: 56px;
   text-align: right;
 }
 
@@ -423,4 +424,18 @@ section > button + .hint {
   padding-top: 6px;
   border-top: 1px solid var(--border);
   font-weight: 600;
+}
+
+.checks {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.checks button {
+  width: 100%;
+  text-align: left;
+  border-left: 3px solid var(--error);
 }
