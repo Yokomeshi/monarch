@@ -246,8 +246,7 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
                   </>
                 ) : (
                   <p className="error" data-testid="identify-error">
-                    Couldn't identify the gaps: {identifying.error}. This needs the app run with a TypeSafe key; see
-                    the README.
+                    Couldn't identify the gaps: {identifying.error}. The README explains the setup this needs.
                   </p>
                 ))}
               {!identified && (

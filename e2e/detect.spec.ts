@@ -103,8 +103,17 @@ test('without the service, identifying fails with an explanation and the walls c
   await app.goto('/')
   await app.route('**/jev', (route) => route.fulfill({ status: 404, body: 'Not found' }))
   await detectOnOpeningsPlan(app)
-  await app.getByRole('button', { name: 'Identify doors and windows' }).click()
-  await expect(app.getByTestId('identify-error')).toContainText("Couldn't identify the gaps: Jev request failed (404)")
+  const identify = app.getByRole('button', { name: 'Identify doors and windows' })
+  await identify.click()
+  await expect(app.getByTestId('identify-error')).toContainText("Couldn't identify the gaps: Jev request failed (404).")
+
+  // When the server explains itself, the explanation is shown.
+  await app.unroute('**/jev')
+  await app.route('**/jev', (route) => route.fulfill({ status: 500, json: { error: 'The server is not configured for Jev.' } }))
+  await identify.click()
+  await expect(app.getByTestId('identify-error')).toContainText(
+    "Couldn't identify the gaps: Jev request failed (500): The server is not configured for Jev.",
+  )
 
   await app.getByRole('button', { name: 'Add walls' }).click()
   await expect(app.getByTestId('wall-count')).toHaveText('6')
