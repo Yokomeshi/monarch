@@ -43,6 +43,6 @@ To use the feature in a hosted copy of the app, host it on Cloudflare. `wrangler
    - `APP_PASSWORD`: a long random password that you make up and share.
 4. Open the site, run **Detect walls**, press **Identify doors and windows**, and enter the password when asked. The app remembers it in that browser.
 
-Until both secrets are set, the button reports that the server is not configured. Anyone with the password can spend your Jev credits, so share it only with people you trust. To revoke access, change `APP_PASSWORD` in Cloudflare's settings.
+These must be the project's runtime **Variables and Secrets**, not the build variables on the setup screen or under the Build settings: the running app cannot read build variables. Until both secrets are set, the button reports that the server is not configured. Anyone with the password can spend your Jev credits, so share it only with people you trust. To revoke access, change `APP_PASSWORD` in Cloudflare's settings.
 
 The GitHub Pages preview keeps working as before, without this feature.

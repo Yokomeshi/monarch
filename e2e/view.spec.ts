@@ -33,6 +33,9 @@ test('cutaway cuts the walls in the view so the rooms show, without changing the
 })
 
 test('walk through a room: look, move, stop at walls, and leave', async ({ app }) => {
+  // Walking redraws the room continuously, which software rendering on CI does slowly: this test
+  // takes about 1.8 minutes there (40 s on a faster machine), too close to the usual 2-minute limit.
+  test.slow()
   await drawRoom(app) // 6 m x 4 m, centred on the origin; walls 2.7 m high
   const top = await topView(app)
   await click(app, top(0, -2)) // the north wall, straight ahead of where the walk starts

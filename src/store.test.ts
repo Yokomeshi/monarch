@@ -458,6 +458,32 @@ describe('suggested walls', () => {
     expect(store().suggestedGaps).toEqual([])
   })
 
+  it('lose one wall and its gaps when it is removed', () => {
+    const walls = suggestion()
+    const gap = { position: 1, width: 0.8, kind: null, confidence: 0 }
+    useStore.setState({
+      suggestedWalls: walls,
+      suggestedGaps: [{ ...gap, wallId: walls[0].id }, { ...gap, wallId: walls[1].id }],
+      suggestedGapCrops: [{ x: 0, y: 0, size: 10 }, { x: 5, y: 5, size: 10 }],
+    })
+    store().removeSuggestedWall(walls[0].id)
+    expect(store().suggestedWalls).toEqual([walls[1]])
+    expect(store().suggestedGaps).toEqual([{ ...gap, wallId: walls[1].id }])
+    expect(store().suggestedGapCrops).toEqual([{ x: 5, y: 5, size: 10 }])
+  })
+
+  it('let a gap be set by hand: door, then window, then plain wall, then door again', () => {
+    const walls = suggestion()
+    // Identified as a door, but not confidently enough to act on: it counts as plain wall.
+    useStore.setState({ suggestedWalls: walls, suggestedGaps: [{ wallId: walls[0].id, position: 2, width: 0.8, kind: 'door', confidence: 0.4 }] })
+    const kinds = [1, 2, 3, 4].map(() => {
+      store().cycleSuggestedGap(0)
+      return store().suggestedGaps[0]
+    })
+    expect(kinds.map((g) => g.kind)).toEqual(['door', 'window', 'none', 'door'])
+    expect(kinds.every((g) => g.confidence === 1)).toBe(true)
+  })
+
   it('forget the gaps when discarded', () => {
     const walls = suggestion()
     useStore.setState({ suggestedWalls: walls, suggestedGaps: [{ wallId: walls[0].id, position: 2, width: 0.8, kind: 'door', confidence: 1 }] })

@@ -103,8 +103,17 @@ test('without the service, identifying fails with an explanation and the walls c
   await app.goto('/')
   await app.route('**/jev', (route) => route.fulfill({ status: 404, body: 'Not found' }))
   await detectOnOpeningsPlan(app)
-  await app.getByRole('button', { name: 'Identify doors and windows' }).click()
-  await expect(app.getByTestId('identify-error')).toContainText("Couldn't identify the gaps: Jev request failed (404)")
+  const identify = app.getByRole('button', { name: 'Identify doors and windows' })
+  await identify.click()
+  await expect(app.getByTestId('identify-error')).toContainText("Couldn't identify the gaps: Jev request failed (404).")
+
+  // When the server explains itself, the explanation is shown.
+  await app.unroute('**/jev')
+  await app.route('**/jev', (route) => route.fulfill({ status: 500, json: { error: 'The server is not configured for Jev.' } }))
+  await identify.click()
+  await expect(app.getByTestId('identify-error')).toContainText(
+    "Couldn't identify the gaps: Jev request failed (500): The server is not configured for Jev.",
+  )
 
   await app.getByRole('button', { name: 'Add walls' }).click()
   await expect(app.getByTestId('wall-count')).toHaveText('6')
@@ -144,4 +153,28 @@ test('the hosted app asks for its access password, remembers it, and sends it wi
   await identify.click()
   await expect(app.getByTestId('identify-result')).toContainText('4 doors')
   expect(passwords).toEqual(['open sesame', 'open sesame', 'open sesame', 'open sesame'])
+})
+
+test('a suggested wall can be removed, and a gap set by hand, before adding', async ({ app }) => {
+  await detectOnOpeningsPlan(app)
+  const at = await topView(app, { width: 12, depth: 9 })
+  const world = (px: number, py: number) => [(px - 600) / 100, (py - 450) / 100] as const
+  const result = app.getByTestId('detect-result')
+
+  // The partition between the two left rooms and the living room, away from its gap.
+  await click(app, at(...world(606, 250)))
+  await expect(result).toContainText('Found 5 walls, shown in orange, with 3 gaps bridged.')
+
+  // The door gap in the bottom wall: one click makes it a door, a second a window.
+  const gap = at(...world(565, 792))
+  await click(app, gap)
+  await expect(app.getByTestId('identify-result')).toHaveText(
+    '1 door (green) and 0 windows (blue) will be added. 2 left as plain wall.',
+  )
+  await click(app, gap)
+  await expect(app.getByTestId('identify-result')).toContainText('0 doors (green) and 1 window (blue) will be added.')
+
+  await app.getByRole('button', { name: 'Add walls' }).click()
+  await expect(app.getByTestId('wall-count')).toHaveText('5')
+  await expect(app.getByTestId('opening-summary')).toHaveText('0 doors, 1 window')
 })
