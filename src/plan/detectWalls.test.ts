@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectWalls, type Raster } from './detectWalls'
+import { detectPlan, detectWalls, type Raster } from './detectWalls'
 
 type Rgb = [number, number, number]
 const BLACK: Rgb = [0, 0, 0]
@@ -140,5 +140,72 @@ describe('detectWalls', () => {
     const started = performance.now()
     expect(detectWalls(image, options)).toHaveLength(20)
     expect(performance.now() - started).toBeLessThan(2000)
+  })
+})
+
+describe('detectPlan', () => {
+  it('reports the door gap bridged in a horizontal wall', () => {
+    const image = blank(400, 200)
+    fill(image, 20, 100, 380, 110) // wall 0, no gap
+    fill(image, 20, 20, 150, 30)
+    fill(image, 200, 20, 380, 30) // 50 px gap, 130 px from the start
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toEqual(detectWalls(image, options))
+    expect(walls).toHaveLength(2)
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0].wall).toBe(0)
+    expect(Math.abs(gaps[0].start - 130)).toBeLessThanOrEqual(1)
+    expect(Math.abs(gaps[0].end - 180)).toBeLessThanOrEqual(1)
+  })
+
+  it('reports both gaps of a wall merged from three pieces, in order', () => {
+    const image = blank(500, 100)
+    fill(image, 20, 20, 120, 30)
+    fill(image, 160, 20, 300, 30) // 40 px gap
+    fill(image, 350, 20, 480, 30) // 50 px gap
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toEqual([{ start: { x: 20, y: 25 }, end: { x: 480, y: 25 }, thickness: 10 }])
+    expect(gaps).toEqual([
+      { wall: 0, start: 100, end: 140 },
+      { wall: 0, start: 280, end: 330 },
+    ])
+  })
+
+  it('measures a gap in a vertical wall downwards from its top end', () => {
+    const image = blank(400, 400)
+    fill(image, 100, 20, 300, 30) // horizontal wall 0
+    fill(image, 20, 100, 30, 200)
+    fill(image, 20, 250, 30, 380) // 50 px gap
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls[1]).toEqual({ start: { x: 25, y: 100 }, end: { x: 25, y: 380 }, thickness: 10 })
+    expect(gaps).toEqual([{ wall: 1, start: 100, end: 150 }])
+  })
+
+  it('measures gap offsets from a start snapped onto a perpendicular wall', () => {
+    const image = blank(400, 300)
+    fill(image, 20, 20, 32, 280) // vertical wall, centre-line x = 26
+    fill(image, 32, 100, 150, 110) // ink starts at 32, start snaps to 26
+    fill(image, 200, 100, 380, 110) // gap 150..200
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls[0].start).toEqual({ x: 26, y: 105 })
+    expect(gaps).toEqual([{ wall: 0, start: 124, end: 174 }])
+  })
+
+  it('does not report a gap wider than maxGap', () => {
+    const image = blank(400, 100)
+    fill(image, 20, 20, 150, 30)
+    fill(image, 211, 20, 380, 30) // 61 px gap
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toHaveLength(2)
+    expect(gaps).toEqual([])
+  })
+
+  it('returns no gaps for a plan without any', () => {
+    const image = blank(300, 300)
+    fill(image, 20, 20, 280, 30)
+    fill(image, 20, 20, 30, 280)
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toHaveLength(2)
+    expect(gaps).toEqual([])
   })
 })

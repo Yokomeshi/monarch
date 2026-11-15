@@ -18,6 +18,14 @@ export interface DetectedWall {
   thickness: number
 }
 
+export interface DetectedGap {
+  /** Index into `walls` of the wall this gap was bridged in. */
+  wall: number
+  /** Where the gap starts and ends, in pixels along the wall's centre-line measured from the wall's `start`. start < end. */
+  start: number
+  end: number
+}
+
 export interface DetectOptions {
   /** Strokes thinner than this many pixels are annotation, not walls. */
   minThickness: number
@@ -45,6 +53,11 @@ interface Band {
   a1: number
   c0: number
   c1: number
+}
+
+/** A band joined from collinear pieces, with the gaps [from, to) between the ink of neighbouring pieces, in order. */
+interface Wall extends Band {
+  gaps: [from: number, to: number][]
 }
 
 const centre = (b: Band) => (b.c0 + b.c1) / 2
@@ -138,16 +151,17 @@ function findBands(mask: Uint8Array, width: number, height: number, minLength: n
 }
 
 /** Joins collinear bands whose gap is at most `maxGap`. The longer piece decides the centre-line and thickness. */
-function bridgeGaps(bands: Band[], maxGap: number): Band[] {
-  const merged: Band[] = []
+function bridgeGaps(bands: Band[], maxGap: number): Wall[] {
+  const merged: Wall[] = []
   for (const b of [...bands].sort((p, q) => p.a0 - q.a0)) {
     const m = merged.find(
       (m) => Math.abs(centre(m) - centre(b)) <= Math.min(thickness(m), thickness(b)) / 2 && b.a0 - m.a1 <= maxGap,
     )
     if (!m) {
-      merged.push({ ...b })
+      merged.push({ ...b, gaps: [] })
       continue
     }
+    if (b.a0 > m.a1) m.gaps.push([m.a1, b.a0])
     if (length(b) > length(m)) {
       m.c0 = b.c0
       m.c1 = b.c1
@@ -161,7 +175,7 @@ function bridgeGaps(bands: Band[], maxGap: number): Band[] {
  * Where an end of a band lies on a perpendicular band, the end moves onto that band's centre-line,
  * so that corners share a point and the stem of a T ends on the bar: rooms close only then.
  */
-function snapEnds(bands: Band[], crossing: Band[]): Band[] {
+function snapEnds(bands: Wall[], crossing: Band[]): Wall[] {
   const snap = (a: number, c: number) => {
     const hit = crossing.find(
       (o) =>
@@ -177,6 +191,11 @@ function snapEnds(bands: Band[], crossing: Band[]): Band[] {
  * then left to right; then vertical walls, left to right then top to bottom. `start` is the left or top end.
  */
 export function detectWalls(image: Raster, options: DetectOptions): DetectedWall[] {
+  return detectPlan(image, options).walls
+}
+
+/** The walls that `detectWalls` finds, and every gap that was bridged to join collinear pieces: by wall, then along it. */
+export function detectPlan(image: Raster, options: DetectOptions): { walls: DetectedWall[]; gaps: DetectedGap[] } {
   const { width, height } = image
   const { minThickness, minLength, maxGap } = options
 
@@ -197,17 +216,25 @@ export function detectWalls(image: Raster, options: DetectOptions): DetectedWall
   const horizontal = walls(solid, width, height)
   const vertical = walls(transpose(solid, width, height), height, width)
 
-  const inOrder = (bands: Band[]) => bands.sort((p, q) => centre(p) - centre(q) || p.a0 - q.a0)
-  return [
-    ...inOrder(snapEnds(horizontal, vertical)).map((b) => ({
-      start: { x: b.a0, y: centre(b) },
-      end: { x: b.a1, y: centre(b) },
-      thickness: thickness(b),
-    })),
-    ...inOrder(snapEnds(vertical, horizontal)).map((b) => ({
-      start: { x: centre(b), y: b.a0 },
-      end: { x: centre(b), y: b.a1 },
-      thickness: thickness(b),
-    })),
-  ]
+  const inOrder = (bands: Wall[]) => bands.sort((p, q) => centre(p) - centre(q) || p.a0 - q.a0)
+  const across = inOrder(snapEnds(horizontal, vertical))
+  const down = inOrder(snapEnds(vertical, horizontal))
+  return {
+    walls: [
+      ...across.map((b) => ({
+        start: { x: b.a0, y: centre(b) },
+        end: { x: b.a1, y: centre(b) },
+        thickness: thickness(b),
+      })),
+      ...down.map((b) => ({
+        start: { x: centre(b), y: b.a0 },
+        end: { x: centre(b), y: b.a1 },
+        thickness: thickness(b),
+      })),
+    ],
+    // Gap offsets are taken from the snapped start, which is the wall's `start`.
+    gaps: [...across, ...down].flatMap((b, wall) =>
+      b.gaps.map(([from, to]) => ({ wall, start: from - b.a0, end: to - b.a0 })),
+    ),
+  }
 }
