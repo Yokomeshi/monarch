@@ -19,7 +19,7 @@ import { cropPng, readRaster, type Crop } from './plan/readRaster'
 import { cropSquare, gapMark, gapSuggestions, MIN_CONFIDENCE, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
 import { askJev, JevError } from './ai/jevClient'
 import { gapQuestion, parseGapAnswer } from './ai/jevOpenings'
-import { detectOptions, toWalls } from './plan/suggestWalls'
+import { detectOptions, thinWalls, toWalls } from './plan/suggestWalls'
 
 export interface Texture {
   url: string
@@ -128,6 +128,8 @@ interface State {
   discardSuggestedWalls: () => void
   /** Drop one wall, and its gaps, from the suggestion. */
   removeSuggestedWall: (id: string) => void
+  /** Drop the thin walls from the suggestion, leaving the heavy outer shell. */
+  keepThickSuggestedWalls: () => void
   /** Set by hand what a suggested gap is: each call moves on through door, window, plain wall. */
   cycleSuggestedGap: (index: number) => void
   setAccessPassword: (password: string) => void
@@ -386,6 +388,8 @@ export const useStore = create<State>()((set, get) => ({
         suggestedGapCrops: s.suggestedGapCrops.filter((_, i) => keep[i]),
       }
     }),
+
+  keepThickSuggestedWalls: () => thinWalls(get().suggestedWalls ?? []).forEach((w) => get().removeSuggestedWall(w.id)),
 
   cycleSuggestedGap: (index) =>
     set((s) => ({
