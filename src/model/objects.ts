@@ -12,7 +12,14 @@ export interface Size3 {
   height: number
 }
 
-export type ObjectKind = 'bed' | 'sofa' | 'table' | 'chair' | 'desk' | 'wardrobe' | 'bookshelf' | 'counter'
+export type CabinetKind = 'baseCabinet' | 'wallCabinet' | 'tallCabinet'
+
+export type ObjectKind = 'bed' | 'sofa' | 'table' | 'chair' | 'desk' | 'wardrobe' | 'bookshelf' | 'counter' | CabinetKind
+
+/** How a cabinet's front is divided. */
+export interface CabinetOptions {
+  fronts: 'doors' | 'drawers'
+}
 
 export interface PlacedObject {
   id: string
@@ -26,7 +33,14 @@ export interface PlacedObject {
   rotation: number
   size: Size3
   material: Material
+  /** For cabinets: how the front is divided. */
+  cabinet?: CabinetOptions
+  /** Metres from the floor to the underside of the piece. Absent means it stands on the floor. */
+  elevation?: number
 }
+
+export const isCabinet = (kind: PlacedObject['kind']): kind is CabinetKind =>
+  kind === 'baseCabinet' || kind === 'wallCabinet' || kind === 'tallCabinet'
 
 /**
  * One block of a piece. Local coordinates: x across the width, y up from the floor,
@@ -54,10 +68,74 @@ interface Definition {
   size: Size3
   color: string
   roughness: number
-  parts: (s: Size3) => Part[]
+  /** Defaults a new piece of this kind starts with. */
+  cabinet?: CabinetOptions
+  elevation?: number
+  parts: (s: Size3, cabinet?: CabinetOptions) => Part[]
 }
 
 const WOOD = { color: '#a8773f', roughness: 0.6 }
+
+const DOORS: CabinetOptions = { fronts: 'doors' }
+
+/**
+ * A cabinet: an optional toe-kick plinth, the carcass, an optional worktop, and a grid of
+ * fronts on the front face, each with a handle. Doors are columns no wider than 0.6 m
+ * (two tiers of them on a tall cabinet); drawers are full-width rows no taller than 0.3 m.
+ */
+function cabinetParts(kind: CabinetKind, { width: W, depth: D, height: H }: Size3, fronts: CabinetOptions['fronts']): Part[] {
+  const plinth = kind === 'wallCabinet' ? 0 : Math.min(0.1, 0.15 * H)
+  const worktop = kind === 'baseCabinet' ? Math.min(0.04, 0.2 * H) : 0
+  const slab = Math.min(0.02, D / 4)
+  const grip = Math.min(0.02, D / 8)
+  const toe = Math.min(0.05, D / 4)
+  const carcassD = D - slab - grip
+  const faceH = H - plinth - worktop
+  const gap = Math.min(0.004, 0.02 * W, 0.02 * faceH)
+  const drawers = fronts === 'drawers'
+  // The small allowance keeps rounding from adding a door to an exact multiple of 0.6 m.
+  const cols = drawers ? 1 : Math.max(1, Math.ceil(W / 0.6 - 1e-9))
+  const rows = drawers ? Math.max(1, Math.ceil(faceH / 0.3 - 1e-9)) : kind === 'tallCabinet' ? 2 : 1
+  const w = (W - gap * (cols + 1)) / cols
+  const h = (faceH - gap * (rows + 1)) / rows
+  const slabZ = -D / 2 + carcassD + slab / 2
+  const gripZ = D / 2 - grip / 2
+  // A drawer has a bar across its middle. A door has an upright bar by its opening edge,
+  // at the end nearer the hand: the top of a low door, the bottom of a high one.
+  const gripW = drawers ? Math.min(0.16, 0.4 * w) : Math.min(0.012, 0.1 * w)
+  const gripH = drawers ? Math.min(0.012, 0.1 * h) : Math.min(0.12, 0.3 * h)
+  const insetX = Math.min(0.03, 0.1 * w)
+  const insetY = Math.min(0.05, 0.1 * h)
+  const parts: Part[] = []
+  if (plinth > 0) parts.push(part(W, plinth, carcassD - toe, 0, 0, -D / 2 + (carcassD - toe) / 2))
+  parts.push(part(W, faceH, carcassD, 0, plinth, -D / 2 + carcassD / 2))
+  if (worktop > 0) parts.push(part(W, worktop, D, 0, H - worktop, 0, true))
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = -W / 2 + gap + w / 2 + col * (w + gap)
+      const bottom = plinth + gap + row * (h + gap)
+      parts.push(part(w, h, slab, x, bottom, slabZ))
+      if (drawers) parts.push(part(gripW, gripH, grip, x, bottom + (h - gripH) / 2, gripZ, true))
+      else {
+        const side = col % 2 === 0 ? 1 : -1
+        const high = kind === 'wallCabinet' || row === 1
+        const gripBottom = high ? bottom + insetY : bottom + h - insetY - gripH
+        parts.push(part(gripW, gripH, grip, x + side * (w / 2 - insetX - gripW / 2), gripBottom, gripZ, true))
+      }
+    }
+  }
+  return parts
+}
+
+const cabinet = (kind: CabinetKind, name: string, size: Size3, elevation?: number): Definition => ({
+  name,
+  size,
+  color: '#d8d4cc',
+  roughness: 0.5,
+  cabinet: DOORS,
+  ...(elevation !== undefined && { elevation }),
+  parts: (s, options = DOORS) => cabinetParts(kind, s, options.fronts),
+})
 
 // Fixed details (leg and panel thicknesses) are capped by a share of the piece's size,
 // so every part stays inside the stated dimensions at any size.
@@ -187,10 +265,13 @@ export const LIBRARY: Record<ObjectKind, Definition> = {
       return [part(W, H - top, D - overhang, 0, 0, -overhang / 2), part(W, top, D, 0, H - top, 0, true)]
     },
   },
+  baseCabinet: cabinet('baseCabinet', 'Base cabinet', { width: 0.6, depth: 0.6, height: 0.9 }),
+  wallCabinet: cabinet('wallCabinet', 'Wall cabinet', { width: 0.6, depth: 0.35, height: 0.72 }, 1.45),
+  tallCabinet: cabinet('tallCabinet', 'Tall cabinet', { width: 0.6, depth: 0.6, height: 2.1 }),
 }
 
 export function createObject(kind: ObjectKind, position: Vec2): PlacedObject {
-  const { size, color, roughness } = LIBRARY[kind]
+  const { size, color, roughness, cabinet, elevation } = LIBRARY[kind]
   return {
     id: crypto.randomUUID(),
     kind,
@@ -198,12 +279,17 @@ export function createObject(kind: ObjectKind, position: Vec2): PlacedObject {
     rotation: 0,
     size: { ...size },
     material: { color, roughness, metalness: 0, textureId: null, tileSize: 1 },
+    ...(cabinet && { cabinet: { ...cabinet } }),
+    ...(elevation !== undefined && { elevation }),
   }
 }
 
-/** The blocks that make up a library piece. An imported model has none: its file is drawn instead. */
-export const objectParts = (o: Pick<PlacedObject, 'kind' | 'size'>): Part[] =>
-  o.kind === 'model' ? [] : LIBRARY[o.kind].parts(o.size)
+/**
+ * The blocks that make up a library piece, with y measured from its own underside.
+ * An imported model has none: its file is drawn instead.
+ */
+export const objectParts = (o: Pick<PlacedObject, 'kind' | 'size' | 'cabinet'>): Part[] =>
+  o.kind === 'model' ? [] : LIBRARY[o.kind].parts(o.size, o.cabinet)
 
 /** Each dimension of an object stays between these, in metres. */
 export const SIZE_LIMITS = { min: 0.1, max: 10 }
@@ -232,6 +318,7 @@ export function duplicateObject(o: PlacedObject): PlacedObject {
     position: { x: o.position.x + 0.5, z: o.position.z + 0.5 },
     size: { ...o.size },
     material: { ...o.material },
+    ...(o.cabinet && { cabinet: { ...o.cabinet } }),
   }
 }
 

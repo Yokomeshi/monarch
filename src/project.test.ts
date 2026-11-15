@@ -36,6 +36,7 @@ function sample(): ProjectFile {
     objects: [
       { ...createObject('sofa', p(1, 2)), rotation: 90 },
       createModelObject('m1', { width: 1, depth: 2, height: 3 }, p(0, 0)),
+      { ...createObject('wallCabinet', p(3, 0.2)), cabinet: { fronts: 'drawers' }, elevation: 1.5 },
     ],
     models: { m1: { name: 'lamp.glb', format: 'glb', naturalSize: { width: 1, depth: 2, height: 3 }, data: MODEL } },
     sun: { enabled: true, latitude: 51.5, day: 172, hour: 14.5, north: 30 },
@@ -129,6 +130,21 @@ describe('parseProject', () => {
     expect(parse(edit)).toThrow(/damaged/)
   })
 
+  it('opens a version 9 file, whose furniture has no cabinet fields', () => {
+    const project = parse((d) => {
+      d.version = 9
+      d.objects = d.objects.filter((o: any) => o.kind !== 'wallCabinet')
+    })()
+    expect(project.objects.every((o) => !('cabinet' in o) && !('elevation' in o))).toBe(true)
+  })
+
+  it.each([
+    ['a cabinet with an unknown front style', (d: any) => (d.objects[2].cabinet.fronts = 'curtains')],
+    ['a piece below the floor', (d: any) => (d.objects[2].elevation = -1)],
+  ])('rejects %s', (_name, edit) => {
+    expect(parse(edit)).toThrow(/damaged/)
+  })
+
   it('opens a version 8 file, which has no cost rates, with the default rates', () => {
     const project = parse((d) => {
       d.version = 8
@@ -165,10 +181,10 @@ describe('parseProject', () => {
     const project = parse((d) => {
       d.version = 5
       delete d.models
-      d.objects.pop()
+      d.objects = d.objects.filter((o: any) => o.kind !== 'model')
     })()
     expect(project.models).toEqual({})
-    expect(project.objects).toHaveLength(1)
+    expect(project.objects).toHaveLength(2)
   })
 
   it.each([

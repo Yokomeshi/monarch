@@ -178,3 +178,40 @@ test('duplicate a piece and nudge it with the arrow keys', async ({ app }, testI
   expect(second.position.x - copy.position.x).toBeCloseTo(0.5, 9)
   expect(second.position.z - copy.position.z).toBeCloseTo(0.5, 9)
 })
+
+test('cabinets: a base cabinet with drawers, and a wall cabinet hung above it without clashing', async ({ app }, testInfo) => {
+  await drawRoom(app)
+  const top = await topView(app)
+
+  await pressTool(app, 'Base cabinet')
+  await click(app, top(0, 0))
+  await expect(app.getByRole('heading', { name: 'Selected base cabinet' })).toBeVisible()
+  await expect(field(app, 'Height')).toHaveValue('0.900 m')
+  await expect(field(app, 'Off floor')).toHaveValue('0.000 m')
+  const fronts = (name: string) => app.getByRole('radiogroup', { name: 'Fronts' }).getByRole('radio', { name })
+  await expect(fronts('Doors')).toBeChecked()
+  await fronts('Drawers').click()
+  await expect(fronts('Drawers')).toBeChecked()
+
+  // A wall cabinet in the same spot hangs above the base cabinet: no clash.
+  await pressTool(app, 'Wall cabinet')
+  await click(app, top(0, 0))
+  await expect(app.getByRole('heading', { name: 'Selected wall cabinet' })).toBeVisible()
+  await expect(field(app, 'Off floor')).toHaveValue('1.450 m')
+  await expect(app.getByTestId('checks-ok')).toBeVisible()
+  // Lowered into the base cabinet, it clashes.
+  await type(app, 'Off floor', '0.5 m')
+  await expect(app.getByTestId('checks').getByRole('button')).toHaveText(['Base cabinet overlaps wall cabinet'])
+  await type(app, 'Off floor', '1.45 m')
+  await expect(app.getByTestId('checks-ok')).toBeVisible()
+
+  // Both survive save and open.
+  const path = testInfo.outputPath('cabinets.json')
+  const [download] = await Promise.all([app.waitForEvent('download'), app.getByRole('button', { name: 'Save…' }).click()])
+  await download.saveAs(path)
+  await app.reload()
+  await app.getByTestId('project-input').setInputFiles(path)
+  await expect(app.getByTestId('furniture-summary')).toHaveText('2 pieces')
+  // Still hung at its height: on the floor it would clash with the base cabinet under it.
+  await expect(app.getByTestId('checks-ok')).toBeVisible()
+})

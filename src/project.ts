@@ -12,8 +12,9 @@ import type { Units } from './units'
 
 // Version 2 added room floor and ceiling materials, version 3 openings, version 4
 // door hinge and swing sides, version 5 furniture, version 6 imported 3D models, and
-// version 7 the sun study, version 8 ceiling lights, and version 9 cost rates. Older files still open.
-export const PROJECT_VERSION = 9
+// version 7 the sun study, version 8 ceiling lights, version 9 cost rates, and version 10 cabinets
+// (front style, and a height off the floor). Older files still open.
+export const PROJECT_VERSION = 10
 
 export interface ProjectFile {
   app: 'monarch'
@@ -202,10 +203,24 @@ function parseObjects(
       rotation,
       size: parseSize(o.size, label),
       material: parseMaterial(o.material, label, textures),
+      ...parseCabinet(o, label),
     }
   })
   if (new Set(objects.map((o) => o.id)).size !== objects.length) throw invalid('furniture (duplicate ids)')
   return objects
+}
+
+/** A cabinet's front style and a piece's height off the floor: both optional, absent in files before version 10. */
+function parseCabinet(o: Record<string, unknown>, label: string): Pick<PlacedObject, 'cabinet' | 'elevation'> {
+  const { cabinet, elevation } = o
+  if (cabinet !== undefined && !(isObject(cabinet) && (cabinet.fronts === 'doors' || cabinet.fronts === 'drawers'))) {
+    throw invalid(`${label} fronts`)
+  }
+  if (elevation !== undefined && !(isFiniteNumber(elevation) && elevation >= 0)) throw invalid(`${label} height off the floor`)
+  return {
+    ...(isObject(cabinet) && { cabinet: { fronts: cabinet.fronts as 'doors' | 'drawers' } }),
+    ...(elevation !== undefined && { elevation: elevation as number }),
+  }
 }
 
 function parseOpenings(list: unknown, wallIds: Set<string>): Opening[] {

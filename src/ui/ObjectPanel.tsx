@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { useStore } from '../store'
-import { fitSize, LIBRARY, resizeProportional, type PlacedObject, type Size3 } from '../model/objects'
+import { fitSize, isCabinet, LIBRARY, resizeProportional, type PlacedObject, type Size3 } from '../model/objects'
 import { LengthControl, type LengthRange } from './LengthControl'
 import { MaterialControls } from './MaterialControls'
 
@@ -8,6 +8,12 @@ const INCH = 0.0254
 const SIZE_RANGE: LengthRange = {
   metric: { min: 0.1, max: 6, step: 0.01 },
   imperial: { min: 4 * INCH, max: 240 * INCH, step: INCH / 2 },
+}
+
+/** A wall cabinet hangs anywhere from the floor to just under a high ceiling. */
+const ELEVATION_RANGE: LengthRange = {
+  metric: { min: 0, max: 3, step: 0.01 },
+  imperial: { min: 0, max: 120 * INCH, step: INCH / 2 },
 }
 
 const ARROWS: Record<string, [number, number]> = {
@@ -78,6 +84,24 @@ export function ObjectPanel({ object }: { object: PlacedObject }) {
           </label>
           <button onClick={() => set({ size: fitSize(model.naturalSize) })}>Reset size</button>
         </div>
+      )}
+      {isCabinet(object.kind) && (
+        <>
+          <LengthControl label="Off floor" value={object.elevation ?? 0} range={ELEVATION_RANGE} onChange={(elevation) => set({ elevation })} />
+          <div className="segmented" role="radiogroup" aria-label="Fronts">
+            {(['doors', 'drawers'] as const).map((fronts) => (
+              <button
+                key={fronts}
+                role="radio"
+                aria-checked={object.cabinet?.fronts === fronts}
+                className={object.cabinet?.fronts === fronts ? 'active' : ''}
+                onClick={() => set({ cabinet: { fronts } })}
+              >
+                {fronts === 'doors' ? 'Doors' : 'Drawers'}
+              </button>
+            ))}
+          </div>
+        </>
       )}
       <div className="field-row">
         <label htmlFor={rotationId}>Rotation</label>

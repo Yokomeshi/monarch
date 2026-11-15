@@ -65,7 +65,7 @@ function ObjectModel({ object, selected, clashing, interactive }: ObjectModelPro
   /** While dragging: the piece's centre minus the point on the ground that was grabbed. */
   const grab = useRef<{ x: number; z: number } | null>(null)
   const { width, depth, height } = object.size
-  const parts = useMemo(() => objectParts(object), [object.kind, width, depth, height]) // eslint-disable-line react-hooks/exhaustive-deps
+  const parts = useMemo(() => objectParts(object), [object.kind, width, depth, height, object.cabinet?.fronts]) // eslint-disable-line react-hooks/exhaustive-deps
   const accent = useMemo(
     () => `#${new Color(object.material.color).lerp(new Color('#ffffff'), 0.55).getHexString()}`,
     [object.material.color],
@@ -100,7 +100,7 @@ function ObjectModel({ object, selected, clashing, interactive }: ObjectModelPro
 
   return (
     // Local axes: x across the width, y up, z across the depth with the back at -z.
-    <group position={[object.position.x, 0, object.position.z]} rotation-y={(object.rotation * Math.PI) / 180} {...handlers}>
+    <group position={[object.position.x, object.elevation ?? 0, object.position.z]} rotation-y={(object.rotation * Math.PI) / 180} {...handlers}>
       {/* Invisible bounding box: an easy target between a table's legs, and the outline. */}
       <mesh position-y={height / 2}>
         <boxGeometry args={[width, height, depth]} />
