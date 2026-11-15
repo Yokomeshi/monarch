@@ -3,5 +3,7 @@
   "name": "monarch",
   "main": "worker/index.ts",
   "compatibility_date": "2025-09-01",
-  "assets": { "directory": "./dist", "binding": "ASSETS" }
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  // Required, even empty, for Cloudflare to build a preview of each branch (`wrangler preview`).
+  "previews": {}
 }
