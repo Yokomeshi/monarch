@@ -439,3 +439,8 @@ section > button + .hint {
   text-align: left;
   border-left: 3px solid var(--error);
 }
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
