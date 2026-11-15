@@ -1,11 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { detectOptions, toWalls } from './suggestWalls'
+import { detectOptions, thinWalls, toWalls } from './suggestWalls'
+import { createWall } from '../model/walls'
 import { WALL_DEFAULTS } from '../model/walls'
 
 describe('detectOptions', () => {
   it('keeps the thickness limit in pixels and turns real sizes into pixels', () => {
     expect(detectOptions(0.01)).toEqual({ minThickness: 4, minLength: 50, maxGap: 250 })
     expect(detectOptions(0.02).minLength).toBe(25)
+  })
+})
+
+describe('thinWalls', () => {
+  const wall = (thickness: number) => createWall({ x: 0, z: 0 }, { x: 3, z: 0 }, { thickness })
+
+  it('are those thinner than half the thickest wall', () => {
+    const walls = [wall(0.4), wall(0.21), wall(0.2), wall(0.19), wall(0.08)]
+    expect(thinWalls(walls)).toEqual([walls[3], walls[4]])
+  })
+
+  it('are none when all walls are of similar thickness', () => {
+    expect(thinWalls([wall(0.12), wall(0.08)])).toEqual([])
+    expect(thinWalls([])).toEqual([])
   })
 })
 

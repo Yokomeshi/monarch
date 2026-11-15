@@ -17,6 +17,16 @@ export function detectOptions(metresPerPx: number): DetectOptions {
   }
 }
 
+/**
+ * The walls that are not thick, judged against the thickest one: thinner than half of it.
+ * On a plan with a heavy outer shell these are the partitions, and with them the stairs,
+ * fixtures and other thin lines that detection takes for walls.
+ */
+export function thinWalls(walls: Wall[]): Wall[] {
+  const thickest = Math.max(...walls.map((w) => w.thickness))
+  return walls.filter((w) => w.thickness < thickest / 2)
+}
+
 /** Model walls for the detected ones: the drawing's position and thickness, and `props` for the rest. */
 export function toWalls(detected: DetectedWall[], frame: PlanFrame, props: WallProps): Wall[] {
   return detected.map((d) =>

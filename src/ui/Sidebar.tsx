@@ -13,6 +13,7 @@ import { ChecksPanel } from './ChecksPanel'
 import { LIBRARY, type ObjectKind } from '../model/objects'
 import { wallLength } from '../model/walls'
 import { openingsFromGaps } from '../plan/suggestOpenings'
+import { thinWalls } from '../plan/suggestWalls'
 import { WallPanel } from './WallPanel'
 
 export function Sidebar() {
@@ -182,6 +183,8 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
   const gaps = useStore((s) => s.suggestedGaps)
   const identifying = useStore((s) => s.identifying)
   const identifyGaps = useStore((s) => s.identifyGaps)
+  const keepThick = useStore((s) => s.keepThickSuggestedWalls)
+  const thin = thinWalls(suggested ?? []).length
   const accessPassword = useStore((s) => s.accessPassword)
   const setAccessPassword = useStore((s) => s.setAccessPassword)
   const identified = gaps.some((g) => g.kind !== null)
@@ -260,7 +263,15 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
           )}
           <p className="hint">
             Click an orange wall to remove it from the suggestion{gaps.length > 0 && ', or a gap to change what it is: door, window or plain wall'}.
+            {thin > 0 && ' On a busy plan, keep the thick outer walls and trace the rest by hand.'}
           </p>
+          {thin > 0 && (
+            <p>
+              <button onClick={keepThick} title="Removes walls thinner than half the thickest one">
+                Keep thick walls only
+              </button>
+            </p>
+          )}
           <div className="row">
             <button onClick={accept}>Add walls</button>
             <button onClick={discard}>Discard</button>

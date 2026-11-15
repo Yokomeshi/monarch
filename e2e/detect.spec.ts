@@ -22,6 +22,8 @@ test('detect the walls drawn on a plan, check them, and add them', async ({ app 
   await detect.click()
   // The outer rectangle, and the two walls of the inner room. The dimension line is not a wall.
   await expect(app.getByTestId('detect-result')).toContainText('Found 6 walls, shown in orange.')
+  // All this plan's walls are of similar weight, so there is nothing thin to strip.
+  await expect(app.getByRole('button', { name: 'Keep thick walls only' })).toBeHidden()
   expect(isOrange(await colourAt(app, onWall)), 'the suggestion is drawn over the wall').toBe(true)
   expect(isOrange(await colourAt(app, onDimension)), 'nothing over the dimension line').toBe(false)
   await expect(app.getByTestId('wall-count')).toBeHidden()

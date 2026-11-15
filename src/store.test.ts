@@ -473,6 +473,20 @@ describe('suggested walls', () => {
     expect(store().suggestedGapCrops).toEqual([crop(5)])
   })
 
+  it('keep only the thick walls, and their gaps, on request', () => {
+    const thick = createWall(p(0, 0), p(4, 0), { thickness: 0.4 })
+    const thin = createWall(p(4, 0), p(4, 3), { thickness: 0.1 })
+    const gap = { position: 1, width: 0.8, kind: null, confidence: 0 }
+    useStore.setState({
+      suggestedWalls: [thick, thin],
+      suggestedGaps: [{ ...gap, wallId: thin.id }, { ...gap, wallId: thick.id }],
+      suggestedGapCrops: [],
+    })
+    store().keepThickSuggestedWalls()
+    expect(store().suggestedWalls).toEqual([thick])
+    expect(store().suggestedGaps).toEqual([{ ...gap, wallId: thick.id }])
+  })
+
   it('let a gap be set by hand: door, then window, then plain wall, then door again', () => {
     const walls = suggestion()
     // Identified as a door, but not confidently enough to act on: it counts as plain wall.
