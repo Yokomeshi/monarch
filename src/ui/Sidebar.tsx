@@ -98,7 +98,6 @@ export function Sidebar() {
       <ChecksPanel />
       <SunPanel />
       <LightsPanel />
-      <Inspector />
     </aside>
   )
 }
@@ -139,7 +138,8 @@ function CalibrationPanel() {
       {!calibrating && (
         <>
           <p className="hint">
-            Click two points on the plan whose real distance you know. The Top view is most precise.
+            Pick two points on the plan whose real distance you know: click each, or press on one and drag to the
+            other. Hold Shift to keep the line straight. The Top view is most precise.
           </p>
           <button onClick={start}>Calibrate scale</button>
         </>
@@ -147,7 +147,10 @@ function CalibrationPanel() {
       {calibrating && points.length < 2 && (
         <>
           <p className="hint">
-            Click point {points.length + 1} of 2 on the plan. Drag to orbit. Esc cancels.
+            {points.length === 0
+              ? 'Click the first point, or press on it and drag to the second.'
+              : 'Click the second point.'}{' '}
+            Shift keeps the line straight. Esc cancels.
           </p>
           <button onClick={cancel}>Cancel</button>
         </>
@@ -188,7 +191,9 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
   const thin = thinWalls(suggested ?? []).length
   const accessPassword = useStore((s) => s.accessPassword)
   const setAccessPassword = useStore((s) => s.setAccessPassword)
+  /** Something has been said about a gap, by the model or by hand; and no gap is still waiting for the model. */
   const identified = gaps.some((g) => g.kind !== null)
+  const toIdentify = gaps.some((g) => g.kind === null && g.crop)
   const added = openingsFromGaps(gaps, suggested ?? [])
   const doors = added.filter((o) => o.type === 'door').length
   const windows = added.length - doors
@@ -253,7 +258,7 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
                     Couldn't identify the gaps: {identifying.error}. The README explains the setup this needs.
                   </p>
                 ))}
-              {!identified && (
+              {toIdentify && (
                 <p>
                   <button disabled={identifying === 'busy'} onClick={identifyGaps}>
                     {identifying === 'busy' ? 'Identifying…' : 'Identify doors and windows'}
@@ -468,7 +473,7 @@ function RoomsPanel() {
 }
 
 /** Edits whatever is selected: furniture, a light, a door or window, a room, or a wall. With nothing selected, the new-wall defaults. */
-function Inspector() {
+export function Inspector() {
   const rooms = useRooms()
   const selectedRoomId = useStore((s) => s.selectedRoomId)
   const opening = useStore((s) => s.openings.find((o) => o.id === s.selectedOpeningId))

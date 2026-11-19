@@ -10,6 +10,7 @@ const Y = 0.01 // just above the plan
 export function CalibrationOverlay({ plan }: { plan: Plan }) {
   const points = useStore((s) => s.calibrationPoints)
   const line = useStore((s) => s.calibrationLine)
+  const preview = useStore((s) => s.calibrationPreview)
   const units = useStore((s) => s.units)
 
   const toVec = (p: Px): [number, number, number] => {
@@ -18,7 +19,8 @@ export function CalibrationOverlay({ plan }: { plan: Plan }) {
   }
 
   const pending = points.length > 0
-  const shown = pending ? points : (line ?? [])
+  // With one point picked, the line follows the pointer to where the second would go.
+  const shown = pending ? (points.length === 1 && preview ? [points[0], preview] : points) : (line ?? [])
   const color = pending ? '#ffb020' : '#36c5f0'
 
   return (

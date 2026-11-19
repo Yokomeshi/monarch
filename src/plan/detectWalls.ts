@@ -177,6 +177,37 @@ function bridgeGaps(bands: Band[], maxGap: number): Wall[] {
 }
 
 /**
+ * A piece shorter than minLength is still wall where it continues one: collinear with a wall, as thick as it
+ * to within a quarter, and beyond one of its ends by a gap of at most `maxGap`, as the last piece of a wall
+ * past a window is. The wall grows over the gap and the piece, keeping its centre-line and thickness.
+ * Only pieces at least half of minLength thick are offered: a thinner one is as likely a stroke of a letter.
+ */
+function extendOverShortPieces(walls: Wall[], pieces: Band[], maxGap: number): void {
+  const wallFor = (s: Band, gap: (m: Wall) => number) =>
+    walls.find(
+      (m) =>
+        Math.abs(centre(m) - centre(s)) <= Math.min(thickness(m), thickness(s)) / 2 &&
+        4 * Math.abs(thickness(m) - thickness(s)) <= thickness(m) &&
+        gap(m) > 0 &&
+        gap(m) <= maxGap,
+    )
+  // Away from the wall's end in each direction, so that a second piece can follow the first.
+  pieces.sort((p, q) => p.a0 - q.a0)
+  for (const s of pieces) {
+    const m = wallFor(s, (m) => s.a0 - m.a1)
+    if (!m) continue
+    m.gaps.push([m.a1, s.a0])
+    m.a1 = s.a1
+  }
+  for (const s of pieces.reverse()) {
+    const m = wallFor(s, (m) => m.a0 - s.a1)
+    if (!m) continue
+    m.gaps.unshift([s.a1, m.a0])
+    m.a0 = s.a0
+  }
+}
+
+/**
  * Where an end of a band lies on a perpendicular band, the end moves onto that band's centre-line,
  * so that corners share a point and the stem of a T ends on the bar: rooms close only then.
  */
@@ -211,13 +242,20 @@ export function detectPlan(image: Raster, options: DetectOptions): { walls: Dete
   const tall = transpose(inLongRuns(transpose(ink, width, height), height, width, minThickness), height, width)
   const solid = wide.map((v, i) => v & tall[i])
 
-  const walls = (mask: Uint8Array, w: number, h: number) =>
-    bridgeGaps(
+  const walls = (mask: Uint8Array, w: number, h: number) => {
+    const merged = bridgeGaps(
       findBands(mask, w, h, minLength).filter(
         (b) => thickness(b) >= minThickness && length(b) >= MIN_ASPECT * thickness(b),
       ),
       maxGap,
     )
+    extendOverShortPieces(
+      merged,
+      findBands(mask, w, h, minThickness).filter((b) => 2 * thickness(b) >= minLength && length(b) < minLength),
+      maxGap,
+    )
+    return merged
+  }
   const horizontal = walls(solid, width, height)
   const vertical = walls(transpose(solid, width, height), height, width)
 

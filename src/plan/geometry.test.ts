@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { metresPerPixel, pixelDistance, pixelToWorld, worldToPixel } from './geometry'
+import { lockAngle, metresPerPixel, pixelDistance, pixelToWorld, worldToPixel } from './geometry'
 
 describe('calibration', () => {
   it('a 500 px span calibrated to 10 ft gives the right scale', () => {
@@ -37,5 +37,26 @@ describe('pixel <-> world', () => {
     const back = worldToPixel(pixelToWorld(p, frame), frame)
     expect(back.x).toBeCloseTo(p.x, 9)
     expect(back.y).toBeCloseTo(p.y, 9)
+  })
+})
+
+describe('lockAngle', () => {
+  const from = { x: 100, y: 100 }
+
+  it('puts a nearly horizontal or vertical line exactly on the axis, keeping the length along it', () => {
+    expect(lockAngle(from, { x: 600, y: 112 })).toEqual({ x: 600, y: 100 })
+    const up = lockAngle(from, { x: 93, y: -200 })
+    expect(up.x).toBeCloseTo(100, 9)
+    expect(up.y).toBeCloseTo(-200, 9)
+  })
+
+  it('locks to diagonals too', () => {
+    const p = lockAngle(from, { x: 300, y: 320 })
+    expect(p.x - from.x).toBeCloseTo(p.y - from.y, 9)
+    expect(p.x).toBeCloseTo(310, 9) // the point on the diagonal nearest the pointer
+  })
+
+  it('leaves the point alone when it is where the line starts', () => {
+    expect(lockAngle(from, from)).toEqual(from)
   })
 })
