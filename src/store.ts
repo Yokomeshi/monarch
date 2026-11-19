@@ -73,6 +73,8 @@ interface State {
   plan: Plan | null
   /** Points being picked while calibrating, in plan pixels (0-2). */
   calibrationPoints: Px[]
+  /** Where the second calibration point would go: the end of the line that follows the pointer. */
+  calibrationPreview: Px | null
   /** The span the current scale was set from, kept on screen as a check. */
   calibrationLine: [Px, Px] | null
   walls: Wall[]
@@ -131,6 +133,7 @@ interface State {
   setTool: (tool: Tool) => void
   loadPlan: (file: File) => Promise<void>
   addCalibrationPoint: (p: Px) => void
+  setCalibrationPreview: (p: Px | null) => void
   applyCalibration: (metres: number) => void
   addDraftPoint: (p: Vec2) => void
   removeDraftPoint: () => void
@@ -236,6 +239,7 @@ export const useStore = create<State>()((set, get) => ({
   tool: 'none',
   plan: null,
   calibrationPoints: [],
+  calibrationPreview: null,
   calibrationLine: null,
   walls: [],
   ...NO_SUGGESTION,
@@ -284,7 +288,7 @@ export const useStore = create<State>()((set, get) => ({
     // Leaving the wall tool keeps what was drawn so far.
     if (get().tool === 'wall') get().finishDraft()
     const keep = tool === 'none'
-    set({ tool, calibrationPoints: [], placementFailed: false, ...(keep ? {} : NO_SELECTION) })
+    set({ tool, calibrationPoints: [], calibrationPreview: null, placementFailed: false, ...(keep ? {} : NO_SELECTION) })
   },
 
   loadPlan: async (file) => {
@@ -319,8 +323,10 @@ export const useStore = create<State>()((set, get) => ({
 
   addCalibrationPoint: (p) => {
     const points = get().calibrationPoints
-    if (points.length < 2) set({ calibrationPoints: [...points, p] })
+    if (points.length < 2) set({ calibrationPoints: [...points, p], calibrationPreview: null })
   },
+
+  setCalibrationPreview: (calibrationPreview) => set({ calibrationPreview }),
 
   applyCalibration: (metres) => {
     const { plan, calibrationPoints, walls } = get()

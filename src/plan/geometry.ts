@@ -35,3 +35,16 @@ export function worldToPixel(w: { x: number; z: number }, f: PlanFrame): Px {
     y: w.z / f.metresPerPx + f.heightPx / 2,
   }
 }
+
+/**
+ * `to` moved onto the nearest line through `from` at a multiple of 45 degrees: the point on that
+ * line closest to `to`. For measuring along a wall, which is drawn straight even if the hand is not.
+ */
+export function lockAngle(from: Px, to: Px): Px {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4)
+  const along = dx * Math.cos(angle) + dy * Math.sin(angle)
+  return { x: from.x + along * Math.cos(angle), y: from.y + along * Math.sin(angle) }
+}
+

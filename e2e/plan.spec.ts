@@ -1,4 +1,5 @@
 import {
+  CALIBRATED, PLAN_PX, UNCALIBRATED, settle,
   calibrate, clickCorners, colourAt, expect, fixture, planExtent, planInput, planToWorld, pressTool, setUnits, setView, test,
   topView, uploadPlan,
 } from './helpers'
@@ -74,4 +75,46 @@ test('point markers stay small on screen however the plan is scaled', async ({ a
   // 14 px away diagonally the plan's white paper must show, not the marker.
   const beside = await colourAt(app, { x: marker.x - 14, y: marker.y - 14 })
   expect(Math.min(...beside), 'the plan is visible right beside the marker').toBeGreaterThan(200)
+})
+
+test('calibrate by pressing on one mark and dragging to the other; Shift keeps the line straight', async ({ app }) => {
+  await setUnits(app, 'Imperial')
+  await uploadPlan(app)
+  await setView(app, 'Top')
+  const distance = app.getByLabel('Real distance between the points')
+  const size = app.getByTestId('plan-size')
+  /** Press on the plan's left mark and drag to its right mark, ending `below` screen pixels under it. */
+  const drag = async (metresPerPx: number, below: number, shift = false) => {
+    const at = await topView(app, planExtent(metresPerPx))
+    const world = planToWorld(metresPerPx)
+    const from = at(...world(250, 400))
+    const to = at(...world(750, 400))
+    const end = { x: to.x, y: to.y + below }
+    await pressTool(app, 'Calibrate scale')
+    await app.mouse.move(from.x, from.y)
+    await app.mouse.down()
+    if (shift) await app.keyboard.down('Shift')
+    await app.mouse.move((from.x + end.x) / 2, (from.y + end.y) / 2, { steps: 5 })
+    await app.mouse.move(end.x, end.y, { steps: 5 })
+    await app.mouse.up()
+    if (shift) await app.keyboard.up('Shift')
+    await expect(distance, 'both points are picked by the one drag').toBeVisible()
+    await distance.fill(`10'`)
+    await app.getByRole('button', { name: 'Set scale' }).click()
+    await settle(app)
+  }
+
+  // Straight from mark to mark: the plan is 20 ft wide, as when clicking the two marks.
+  await drag(UNCALIBRATED, 0)
+  await expect(size).toHaveText(`20' 0" × 16' 0"`)
+
+  // A hand that drifts 30 px off the line measures a longer span, so the plan comes out smaller...
+  await drag(CALIBRATED, 30)
+  await expect(size).not.toHaveText(`20' 0" × 16' 0"`)
+  // ...unless Shift holds the line level. (The scale is now slightly off, so aim by the scale just set.)
+  await setUnits(app, 'Metric')
+  const drifted = parseFloat((await size.textContent())!) // the plan's width in metres
+  await setUnits(app, 'Imperial')
+  await drag(drifted / PLAN_PX.width, 30, true)
+  await expect(size).toHaveText(`20' 0" × 16' 0"`)
 })

@@ -138,7 +138,8 @@ function CalibrationPanel() {
       {!calibrating && (
         <>
           <p className="hint">
-            Click two points on the plan whose real distance you know. The Top view is most precise.
+            Pick two points on the plan whose real distance you know: click each, or press on one and drag to the
+            other. Hold Shift to keep the line straight. The Top view is most precise.
           </p>
           <button onClick={start}>Calibrate scale</button>
         </>
@@ -146,7 +147,10 @@ function CalibrationPanel() {
       {calibrating && points.length < 2 && (
         <>
           <p className="hint">
-            Click point {points.length + 1} of 2 on the plan. Drag to orbit. Esc cancels.
+            {points.length === 0
+              ? 'Click the first point, or press on it and drag to the second.'
+              : 'Click the second point.'}{' '}
+            Shift keeps the line straight. Esc cancels.
           </p>
           <button onClick={cancel}>Cancel</button>
         </>
