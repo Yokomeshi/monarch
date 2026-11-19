@@ -241,6 +241,48 @@ describe('detectPlan', () => {
     expect(gaps).toEqual([])
   })
 
+  it('joins collinear pieces whose centre-lines differ by a few pixels into one wall with one centre-line', () => {
+    const image = blank(400, 100)
+    fill(image, 20, 20, 200, 40) // centre-line y = 30, the longer piece
+    fill(image, 250, 24, 380, 44) // centre-line y = 34, beyond a 50 px gap
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toEqual([{ start: { x: 20, y: 30 }, end: { x: 380, y: 30 }, thickness: 20 }])
+    expect(gaps).toEqual([{ wall: 0, start: 180, end: 230 }])
+  })
+
+  it('ends both thick walls of an L corner on the same point', () => {
+    const image = blank(400, 400)
+    fill(image, 20, 20, 300, 42) // centre-line y = 31
+    fill(image, 20, 20, 40, 300) // centre-line x = 30
+    const { walls } = detectPlan(image, options)
+    expect(walls).toEqual([
+      { start: { x: 30, y: 31 }, end: { x: 300, y: 31 }, thickness: 22 },
+      { start: { x: 30, y: 31 }, end: { x: 30, y: 300 }, thickness: 20 },
+    ])
+  })
+
+  it('keeps a short thick piece beyond a gap at either end of a wall, but not an isolated one', () => {
+    const image = blank(400, 500)
+    fill(image, 100, 20, 120, 300) // vertical wall, 20 px thick
+    fill(image, 100, 350, 120, 375) // its last piece beyond a 50 px window: 25 px, shorter than minLength
+    fill(image, 20, 440, 45, 460) // the first piece of a horizontal wall, 25 px long
+    fill(image, 95, 440, 280, 460)
+    fill(image, 300, 100, 320, 125) // the same blob, in line with no wall
+    fill(image, 341, 438, 366, 462) // in line with the horizontal wall, but 61 px beyond its end
+    fill(image, 200, 20, 380, 30) // a thin wall
+    fill(image, 150, 20, 175, 30) // a short piece in line with it, too thin to tell from a letter
+    const { walls, gaps } = detectPlan(image, options)
+    expect(walls).toEqual([
+      { start: { x: 200, y: 25 }, end: { x: 380, y: 25 }, thickness: 10 },
+      { start: { x: 20, y: 450 }, end: { x: 280, y: 450 }, thickness: 20 },
+      { start: { x: 110, y: 20 }, end: { x: 110, y: 375 }, thickness: 20 },
+    ])
+    expect(gaps).toEqual([
+      { wall: 1, start: 25, end: 75 },
+      { wall: 2, start: 280, end: 330 },
+    ])
+  })
+
   it('drops a wall that snapping leaves shorter than minLength, keeping gap indices valid', () => {
     const image = blank(500, 300)
     fill(image, 100, 20, 138, 280) // vertical wall, 38 px thick, centre-line x = 119
