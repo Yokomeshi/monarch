@@ -130,3 +130,47 @@ test('export the model as an IFC file', async ({ app }, testInfo) => {
   expect(count('IFCSLAB')).toBe(1)
   expect(count('IFCFURNITURE')).toBe(1)
 })
+
+test('undo and redo, by button and by keyboard', async ({ app }) => {
+  const undo = app.getByRole('button', { name: 'Undo' })
+  const redo = app.getByRole('button', { name: 'Redo' })
+  await expect(undo).toBeDisabled()
+  await expect(redo).toBeDisabled()
+
+  await drawRoom(app)
+  const top = await topView(app)
+  await pressTool(app, 'Place door')
+  await click(app, top(0, 2))
+  await expect(app.getByTestId('opening-summary')).toHaveText('1 door, 0 windows')
+  // Drag the height slider: many small changes, one step to undo.
+  await click(app, top(8, 8))
+  await click(app, top(0, -2))
+  await expect(app.getByRole('heading', { name: 'Selected wall' })).toBeVisible()
+  const slider = app.getByRole('slider', { name: 'Height' })
+  await slider.focus()
+  for (let i = 0; i < 5; i++) await app.keyboard.press('ArrowRight')
+  await expect(field(app, 'Height')).not.toHaveValue('2.700 m')
+  await app.waitForTimeout(600)
+
+  await undo.click()
+  await expect(field(app, 'Height'), 'the whole drag is undone at once').toHaveValue('2.700 m')
+  await expect(app.getByTestId('opening-summary')).toHaveText('1 door, 0 windows')
+
+  await app.keyboard.press('Control+z')
+  await expect(app.getByTestId('opening-summary'), 'the door is gone').toBeHidden()
+  await expect(app.getByTestId('wall-count')).toHaveText('4')
+  await app.keyboard.press('Control+z')
+  await expect(app.getByTestId('wall-count'), 'and then the walls').toBeHidden()
+  await expect(undo).toBeDisabled()
+
+  await app.keyboard.press('Control+Shift+z')
+  await expect(app.getByTestId('wall-count')).toHaveText('4')
+  await redo.click()
+  await expect(app.getByTestId('opening-summary')).toHaveText('1 door, 0 windows')
+
+  // Typing in a field: Ctrl+Z belongs to the text, not the model.
+  await click(app, top(0, -2))
+  await field(app, 'Height').fill('3')
+  await app.keyboard.press('Control+z')
+  await expect(app.getByTestId('opening-summary')).toHaveText('1 door, 0 windows')
+})
