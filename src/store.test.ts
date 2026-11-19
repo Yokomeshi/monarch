@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { useStore } from './store'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { UNDO_LIMIT, UNDO_PAUSE, useStore } from './store'
 import { blockGlb, crateObj } from './testModels'
 import { DEFAULT_SUN } from './model/sun'
 import { DEFAULT_RATES } from './model/cost'
@@ -20,6 +20,8 @@ function drawL() {
 beforeEach(() => {
   useStore.setState({
     walls: [],
+    past: [],
+    future: [],
     suggestedWalls: null,
     suggestedGaps: [],
     suggestedGapCrops: [],
@@ -542,5 +544,136 @@ describe('sun study', () => {
     store().setSun({ enabled: false, latitude: 0, day: 1, hour: 0, north: 0 })
     store().loadProject(saved)
     expect(store().sun).toEqual(sun)
+  })
+})
+
+describe('undo and redo', () => {
+  /** Time stands still in these tests; `later` lets enough of it pass for the next change to be a step of its own. */
+  const later = () => vi.advanceTimersByTime(UNDO_PAUSE + 1)
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    later()
+    useStore.setState({ past: [], future: [] })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('undo takes back the last change, and redo puts it back', () => {
+    const walls = drawL()
+    store().undo()
+    expect(store().walls).toEqual([])
+    store().redo()
+    expect(store().walls).toEqual(walls)
+  })
+
+  it('goes back one step at a time, and does nothing when there is nothing left', () => {
+    const [a] = drawL()
+    later()
+    store().updateWall(a.id, { height: 3 })
+    later()
+    store().deleteWall(a.id)
+
+    store().undo()
+    expect(store().walls.map((w) => w.height)).toEqual([3, 2.7])
+    store().undo()
+    expect(store().walls.map((w) => w.height)).toEqual([2.7, 2.7])
+    store().undo()
+    expect(store().walls).toEqual([])
+    store().undo()
+    expect(store().walls).toEqual([])
+    store().redo()
+    store().redo()
+    store().redo()
+    store().redo()
+    expect(store().walls).toHaveLength(1)
+  })
+
+  it('treats changes in quick succession, such as dragging a slider, as one step', () => {
+    const [a] = drawL()
+    later()
+    for (const height of [2.8, 2.9, 3, 3.1]) {
+      vi.advanceTimersByTime(50)
+      store().updateWall(a.id, { height })
+    }
+    store().undo()
+    expect(store().walls[0].height).toBe(2.7)
+    store().redo()
+    expect(store().walls[0].height).toBe(3.1)
+  })
+
+  it('a change made right after an undo is a step of its own', () => {
+    const [a] = drawL()
+    later()
+    store().updateWall(a.id, { height: 3 })
+    store().undo()
+    store().updateWall(a.id, { height: 3.5 })
+    store().undo()
+    expect(store().walls[0].height).toBe(2.7)
+  })
+
+  it('a new change after an undo drops what could have been redone', () => {
+    const [a] = drawL()
+    later()
+    store().updateWall(a.id, { height: 3 })
+    store().undo()
+    later()
+    store().updateWall(a.id, { height: 3.5 })
+    store().redo()
+    expect(store().walls[0].height).toBe(3.5)
+    expect(store().future).toEqual([])
+  })
+
+  it('brings back a deleted wall together with its door', () => {
+    const [a] = drawL()
+    later()
+    store().setTool('door')
+    store().placeOpening(a.id, 2)
+    later()
+    store().deleteWall(a.id)
+    expect(store().openings).toEqual([])
+    store().undo()
+    expect(store().walls).toHaveLength(2)
+    expect(store().openings).toHaveLength(1)
+  })
+
+  it('covers furniture, lights and room finishes, but not the view', () => {
+    store().startPlacingObject('sofa')
+    store().placeObject(p(1, 1))
+    later()
+    store().setTool('light')
+    store().placeLight(p(2, 2))
+    later()
+    store().setCutaway(true)
+    store().setUnits('imperial')
+    expect(store().past).toHaveLength(2)
+
+    store().undo()
+    expect(store().lights).toEqual([])
+    expect(store().objects).toHaveLength(1)
+    store().undo()
+    expect(store().objects).toEqual([])
+    expect(store().cutaway).toBe(true)
+    expect(store().units).toBe('imperial')
+  })
+
+  it('starts afresh when a project is opened', async () => {
+    drawL()
+    const text = await store().saveProject()
+    later()
+    store().clearWalls()
+    later()
+    store().loadProject(text)
+    expect(store().past).toEqual([])
+    store().undo()
+    expect(store().walls).toHaveLength(2)
+  })
+
+  it('remembers a limited number of steps', () => {
+    const [a] = drawL()
+    for (let i = 0; i < UNDO_LIMIT + 20; i++) {
+      later()
+      store().updateWall(a.id, { height: 2 + i / 100 })
+    }
+    expect(store().past).toHaveLength(UNDO_LIMIT)
   })
 })

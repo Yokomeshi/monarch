@@ -338,7 +338,26 @@ function WallsPanel() {
 function ProjectPanel() {
   const saveProject = useStore((s) => s.saveProject)
   const loadProject = useStore((s) => s.loadProject)
+  const undo = useStore((s) => s.undo)
+  const redo = useStore((s) => s.redo)
+  const canUndo = useStore((s) => s.past.length > 0)
+  const canRedo = useStore((s) => s.future.length > 0)
   const [error, setError] = useState<string | null>(null)
+
+  // Ctrl/Cmd+Z undoes; with Shift, or Ctrl/Cmd+Y, redoes. In a text field the keys edit the text instead.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      if (e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox') return
+      e.preventDefault()
+      if (key === 'y' || e.shiftKey) redo()
+      else undo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
 
   const onSave = async () => {
     setError(null)
@@ -378,6 +397,14 @@ function ProjectPanel() {
   return (
     <section>
       <h2>Project</h2>
+      <div className="row">
+        <button disabled={!canUndo} title="Ctrl+Z" onClick={undo}>
+          Undo
+        </button>
+        <button disabled={!canRedo} title="Ctrl+Shift+Z" onClick={redo}>
+          Redo
+        </button>
+      </div>
       <div className="row">
         <button onClick={onSave}>Save…</button>
         <label className="button">

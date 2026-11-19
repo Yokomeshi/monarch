@@ -41,6 +41,16 @@ export type Tool = 'none' | 'calibrate' | 'wall' | 'door' | 'window' | 'object' 
 const NO_SELECTION = { selectedWallId: null, selectedRoomId: null, selectedOpeningId: null, selectedObjectId: null, selectedLightId: null }
 export type ViewMode = '3d' | 'top'
 
+/** What undo and redo restore: the model itself, not the view, the plan image or the selection. */
+const MODEL_KEYS = ['walls', 'openings', 'objects', 'lights', 'roomDefaults', 'roomMaterials'] as const
+type Snapshot = Pick<State, (typeof MODEL_KEYS)[number]>
+const snapshot = (s: State) => Object.fromEntries(MODEL_KEYS.map((k) => [k, s[k]])) as Snapshot
+
+/** Changes closer together than this, in milliseconds, are one step to undo: a slider or a piece being dragged. */
+export const UNDO_PAUSE = 400
+/** How many steps back undo can go. */
+export const UNDO_LIMIT = 100
+
 /** No walls or gaps on offer. */
 const NO_SUGGESTION = { suggestedWalls: null, suggestedGaps: [], suggestedGapCrops: [], identifying: 'idle' as const }
 
@@ -52,6 +62,11 @@ interface State {
   viewMode: ViewMode
   /** Bumped to ask the camera to frame the plan. */
   frameRequest: number
+  /** Earlier states of the model, oldest first, for undo; and undone states, next first, for redo. */
+  past: Snapshot[]
+  future: Snapshot[]
+  /** Bumped when the history is wiped, so the wipe itself is not recorded as a step. */
+  historyEpoch: number
   /** A picture to save: the current view, or a 360° panorama from the camera. A new object for each request. */
   captureRequest: { kind: 'image' | 'panorama' } | null
   tool: Tool
@@ -113,6 +128,8 @@ interface State {
   setViewMode: (mode: ViewMode) => void
   requestFrame: () => void
   requestCapture: (kind: 'image' | 'panorama') => void
+  undo: () => void
+  redo: () => void
   setTool: (tool: Tool) => void
   loadPlan: (file: File) => Promise<void>
   addCalibrationPoint: (p: Px) => void
@@ -215,6 +232,9 @@ export const useStore = create<State>()((set, get) => ({
   viewMode: '3d',
   frameRequest: 0,
   captureRequest: null,
+  past: [],
+  future: [],
+  historyEpoch: 0,
   tool: 'none',
   plan: null,
   calibrationPoints: [],
@@ -249,6 +269,18 @@ export const useStore = create<State>()((set, get) => ({
   setViewMode: (viewMode) => set((s) => ({ viewMode, frameRequest: s.frameRequest + 1 })),
   requestFrame: () => set((s) => ({ frameRequest: s.frameRequest + 1 })),
   requestCapture: (kind) => set({ captureRequest: { kind } }),
+
+  undo: () => {
+    const { past, future } = get()
+    if (past.length === 0) return
+    restore({ ...past[past.length - 1], past: past.slice(0, -1), future: [snapshot(get()), ...future] })
+  },
+
+  redo: () => {
+    const { past, future } = get()
+    if (future.length === 0) return
+    restore({ ...future[0], past: [...past, snapshot(get())], future: future.slice(1) })
+  },
 
   setTool: (tool) => {
     // Leaving the wall tool keeps what was drawn so far.
@@ -305,6 +337,8 @@ export const useStore = create<State>()((set, get) => ({
       openings: scaleOpenings(s.openings, newScale / plan.metresPerPx),
       objects: scaleObjects(s.objects, newScale / plan.metresPerPx),
       lights: scaleLights(s.lights, newScale / plan.metresPerPx),
+      // Earlier states were at the old scale and would no longer sit on the plan.
+      ...noHistory(s),
       tool: 'none',
       calibrationPoints: [],
       calibrationLine: [a, b],
@@ -610,6 +644,7 @@ export const useStore = create<State>()((set, get) => ({
     Object.values(old.textures).forEach((t) => revoke(t.url))
     Object.values(old.models).forEach((m) => revoke(m.url))
     set((s) => ({
+      ...noHistory(s),
       units: file.units,
       plan: file.plan && {
         url: file.plan.image,
@@ -646,3 +681,29 @@ export const useStore = create<State>()((set, get) => ({
     }))
   },
 }))
+
+/** An empty history. */
+function noHistory(s: State) {
+  return { past: [], future: [], historyEpoch: s.historyEpoch + 1 }
+}
+
+let restoring = false
+let lastChange = -Infinity
+
+/** Put back a state from the history. The change this makes is not itself a step. */
+function restore(state: Partial<State>) {
+  restoring = true
+  useStore.setState(state)
+  restoring = false
+  lastChange = -Infinity // whatever is done next is a new step
+}
+
+// Record the model as it was before each change, so the change can be undone.
+useStore.subscribe((s, previous) => {
+  if (restoring || s.historyEpoch !== previous.historyEpoch || MODEL_KEYS.every((k) => s[k] === previous[k])) return
+  const now = Date.now()
+  const sameStep = now - lastChange < UNDO_PAUSE
+  lastChange = now
+  if (sameStep && s.future.length === 0) return
+  useStore.setState({ past: sameStep ? s.past : [...s.past, snapshot(previous)].slice(-UNDO_LIMIT), future: [] })
+})
