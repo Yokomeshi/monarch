@@ -98,6 +98,24 @@ describe('snapping to wall spans', () => {
     expect(snapToWall(p(1.5, 0.5), walls, 0.1)).toBeNull()
   })
 
+  it('measures the tolerance from a thick wall\'s face, so a click on the wall itself joins it', () => {
+    const thick = [createWall(p(0, 0), p(4, 0), { thickness: 0.4 })]
+    // On the wall, 18 cm from its centre-line: farther than the tolerance alone would reach.
+    expect(snapToWall(p(1.5, 0.18), thick, 0.05)).toEqual(p(1.5, 0))
+    // 4 cm off its face.
+    expect(snapToWall(p(1.5, 0.24), thick, 0.05)).toEqual(p(1.5, 0))
+    // 10 cm off its face.
+    expect(snapToWall(p(1.5, 0.3), thick, 0.05)).toBeNull()
+    // The same with an angle lock.
+    expect(snapAlongRay(p(1.5, -2), p(1.5, -0.24), thick, 0.05)).toEqual(p(1.5, 0))
+    expect(snapAlongRay(p(1.5, -2), p(1.5, -0.3), thick, 0.05)).toBeNull()
+  })
+
+  it('prefers the nearer of two walls in reach', () => {
+    const two = [createWall(p(0, 0), p(4, 0), { thickness: 0.4 }), createWall(p(0, 0.3), p(4, 0.3), { thickness: 0.1 })]
+    expect(snapToWall(p(1, 0.22), two, 0.05)).toEqual(p(1, 0.3))
+  })
+
   it('with an angle lock, lands where the locked line meets the wall', () => {
     // Drawing straight down from (1.5, -2); the cursor is a little short of the wall.
     const hit = snapAlongRay(p(1.5, -2), p(1.5, -0.07), walls, 0.1)!

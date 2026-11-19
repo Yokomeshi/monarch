@@ -66,13 +66,23 @@ export function closestPointOnSegment(p: Vec2, a: Vec2, b: Vec2): Vec2 {
   return { x: a.x + t * dx, z: a.z + t * dz }
 }
 
-/** The nearest point on any wall's centreline within `tolerance` metres, or null. */
+/**
+ * The point on a wall's centre-line nearest to `p`, if `p` is on the wall or within `tolerance`
+ * of one of its faces. Measuring from the faces matters for thick walls: a click anywhere on
+ * a 40 cm wall should join it, however far the view is zoomed in.
+ */
 export function snapToWall(p: Vec2, walls: Wall[], tolerance: number): Vec2 | null {
-  return snapToPoint(
-    p,
-    walls.map((w) => closestPointOnSegment(p, w.start, w.end)),
-    tolerance,
-  )
+  let best: Vec2 | null = null
+  let bestDist = Infinity
+  for (const w of walls) {
+    const c = closestPointOnSegment(p, w.start, w.end)
+    const d = distance(p, c)
+    if (d <= w.thickness / 2 + tolerance && d < bestDist) {
+      best = c
+      bestDist = d
+    }
+  }
+  return best
 }
 
 /**
@@ -83,7 +93,8 @@ export function snapToWall(p: Vec2, walls: Wall[], tolerance: number): Vec2 | nu
 export function snapAlongRay(from: Vec2, to: Vec2, walls: Wall[], tolerance: number): Vec2 | null {
   const dx = to.x - from.x
   const dz = to.z - from.z
-  const hits: Vec2[] = []
+  let best: Vec2 | null = null
+  let bestDist = Infinity
   for (const w of walls) {
     const ex = w.end.x - w.start.x
     const ez = w.end.z - w.start.z
@@ -93,9 +104,16 @@ export function snapAlongRay(from: Vec2, to: Vec2, walls: Wall[], tolerance: num
     const qz = w.start.z - from.z
     const s = (qx * ez - qz * ex) / denom // along the ray
     const u = (qx * dz - qz * dx) / denom // along the wall
-    if (s > 0 && u >= 0 && u <= 1) hits.push({ x: from.x + s * dx, z: from.z + s * dz })
+    if (!(s > 0 && u >= 0 && u <= 1)) continue
+    const hit = { x: from.x + s * dx, z: from.z + s * dz }
+    // As in snapToWall, the tolerance is measured from the wall's face, not its centre-line.
+    const d = distance(to, hit)
+    if (d <= w.thickness / 2 + tolerance && d < bestDist) {
+      best = hit
+      bestDist = d
+    }
   }
-  return snapToPoint(to, hits, tolerance)
+  return best
 }
 
 /** Constrain the segment from -> to onto the nearest multiple of `stepDeg`, keeping its length. */
