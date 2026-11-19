@@ -202,3 +202,13 @@ test('closed rooms are listed with their areas, and a partition splits a room', 
   await setUnits(app, 'Imperial')
   await expect(app.getByTestId('rooms-total')).toHaveText('236.2 sq ft')
 })
+
+test('the inspector is in view, right of the 3D view, once a wall is selected', async ({ app }) => {
+  await drawRoom(app)
+  const at = await topView(app)
+  await click(app, at(0, -2))
+  const selected = app.locator('.inspector').getByRole('heading', { name: 'Selected wall' })
+  await expect(selected).toBeInViewport()
+  const canvas = (await app.locator('canvas').boundingBox())!
+  expect((await selected.boundingBox())!.x).toBeGreaterThan(canvas.x + canvas.width)
+})

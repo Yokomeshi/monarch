@@ -8,7 +8,8 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:4173',
-    viewport: { width: 1280, height: 800 },
+    // 1280 plus the 280 px inspector column, so the canvas stays 1000 px wide: wider than tall, 36 px per metre in Top view.
+    viewport: { width: 1560, height: 800 },
     trace: 'off',
     // Software WebGL, so the 3D view renders the same with or without a GPU.
     launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },

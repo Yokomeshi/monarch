@@ -98,7 +98,6 @@ export function Sidebar() {
       <ChecksPanel />
       <SunPanel />
       <LightsPanel />
-      <Inspector />
     </aside>
   )
 }
@@ -468,7 +467,7 @@ function RoomsPanel() {
 }
 
 /** Edits whatever is selected: furniture, a light, a door or window, a room, or a wall. With nothing selected, the new-wall defaults. */
-function Inspector() {
+export function Inspector() {
   const rooms = useRooms()
   const selectedRoomId = useStore((s) => s.selectedRoomId)
   const opening = useStore((s) => s.openings.find((o) => o.id === s.selectedOpeningId))

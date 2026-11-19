@@ -1,5 +1,5 @@
 import { Scene } from './scene/Scene'
-import { Sidebar } from './ui/Sidebar'
+import { Inspector, Sidebar } from './ui/Sidebar'
 import { ViewToolbar } from './ui/ViewToolbar'
 import { useStore } from './store'
 
@@ -18,6 +18,9 @@ export function App() {
           </div>
         )}
       </main>
+      <aside className="inspector">
+        <Inspector />
+      </aside>
     </div>
   )
 }

@@ -30,7 +30,8 @@ body,
   position: relative;
 }
 
-.sidebar {
+.sidebar,
+.inspector {
   width: 280px;
   flex-shrink: 0;
   overflow-y: auto;
@@ -40,12 +41,18 @@ body,
   box-sizing: border-box;
 }
 
+.inspector {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
 .sidebar h1 {
   font-size: 18px;
   margin: 0 0 16px;
 }
 
-.sidebar h2 {
+.sidebar h2,
+.inspector h2 {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -53,7 +60,8 @@ body,
   margin: 0 0 8px;
 }
 
-.sidebar section {
+.sidebar section,
+.inspector section {
   margin-bottom: 20px;
 }
 
