@@ -1,4 +1,5 @@
 import type { Raster } from './detectWalls'
+import type { Crop } from './suggestOpenings'
 
 /** Detection does not need more detail than this, and a huge scan would be slow. */
 const MAX_SIDE = 1600
@@ -26,13 +27,6 @@ const ARM = 0.4
 
 /** Shown to a model at this size: big enough to read a door arc, small enough to send quickly. */
 const CROP_SIDE = 512
-
-export interface Crop {
-  /** The part of the image to show, in image pixels. It may overhang the image. */
-  square: { x: number; y: number; size: number }
-  /** A rectangle to frame with red corner marks, in image pixels: what the question is about. */
-  mark: { x: number; y: number; width: number; height: number }
-}
 
 /** A square of the image as a PNG with the mark drawn on it, base64-encoded without a data: prefix. */
 export async function cropPng(url: string, { square, mark }: Crop): Promise<string> {

@@ -24,7 +24,6 @@ beforeEach(() => {
     future: [],
     suggestedWalls: null,
     suggestedGaps: [],
-    suggestedGapCrops: [],
     identifying: 'idle',
     openings: [],
     objects: [],
@@ -466,13 +465,11 @@ describe('suggested walls', () => {
     const gap = { position: 1, width: 0.8, kind: null, confidence: 0 }
     useStore.setState({
       suggestedWalls: walls,
-      suggestedGaps: [{ ...gap, wallId: walls[0].id }, { ...gap, wallId: walls[1].id }],
-      suggestedGapCrops: [crop(0), crop(5)],
+      suggestedGaps: [{ ...gap, wallId: walls[0].id, crop: crop(0) }, { ...gap, wallId: walls[1].id, crop: crop(5) }],
     })
     store().removeSuggestedWall(walls[0].id)
     expect(store().suggestedWalls).toEqual([walls[1]])
-    expect(store().suggestedGaps).toEqual([{ ...gap, wallId: walls[1].id }])
-    expect(store().suggestedGapCrops).toEqual([crop(5)])
+    expect(store().suggestedGaps).toEqual([{ ...gap, wallId: walls[1].id, crop: crop(5) }])
   })
 
   it('keep only the thick walls, and their gaps, on request', () => {
@@ -482,7 +479,6 @@ describe('suggested walls', () => {
     useStore.setState({
       suggestedWalls: [thick, thin],
       suggestedGaps: [{ ...gap, wallId: thin.id }, { ...gap, wallId: thick.id }],
-      suggestedGapCrops: [],
     })
     store().keepThickSuggestedWalls()
     expect(store().suggestedWalls).toEqual([thick])

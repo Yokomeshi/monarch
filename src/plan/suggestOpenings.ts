@@ -17,6 +17,16 @@ export interface GapSuggestion {
   kind: GapKind | null
   /** Confidence in `kind`, 0 to 1; 0 while kind is null. */
   confidence: number
+  /** Where the gap is on the plan image, for a model to look at. A gap marked by hand has none. */
+  crop?: Crop
+}
+
+/** A part of the plan image, with one rectangle on it singled out. */
+export interface Crop {
+  /** The part of the image to show, in image pixels. It may overhang the image. */
+  square: { x: number; y: number; size: number }
+  /** A rectangle to frame with red corner marks, in image pixels: what the question is about. */
+  mark: { x: number; y: number; width: number; height: number }
 }
 
 /** Narrower than this, in metres, a gap is a break in the drawing (a dimension line crossing the wall, say), not an opening. */

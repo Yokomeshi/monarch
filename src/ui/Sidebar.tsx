@@ -187,7 +187,9 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
   const thin = thinWalls(suggested ?? []).length
   const accessPassword = useStore((s) => s.accessPassword)
   const setAccessPassword = useStore((s) => s.setAccessPassword)
+  /** Something has been said about a gap, by the model or by hand; and no gap is still waiting for the model. */
   const identified = gaps.some((g) => g.kind !== null)
+  const toIdentify = gaps.some((g) => g.kind === null && g.crop)
   const added = openingsFromGaps(gaps, suggested ?? [])
   const doors = added.filter((o) => o.type === 'door').length
   const windows = added.length - doors
@@ -252,7 +254,7 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
                     Couldn't identify the gaps: {identifying.error}. The README explains the setup this needs.
                   </p>
                 ))}
-              {!identified && (
+              {toIdentify && (
                 <p>
                   <button disabled={identifying === 'busy'} onClick={identifyGaps}>
                     {identifying === 'busy' ? 'Identifying…' : 'Identify doors and windows'}
