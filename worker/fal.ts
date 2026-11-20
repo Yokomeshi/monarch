@@ -16,6 +16,11 @@ interface Env {
 const QUEUE = 'https://queue.fal.run'
 /** Tripo H3.1: one photo in, one textured GLB out. Each run is billed to the key's account. */
 export const MODEL = 'tripo3d/h3.1/image-to-3d'
+/**
+ * Triangles in the model. Left to itself the model returned 1.4 million of them in a 44 MB file,
+ * which is slow to draw and is saved inside the project file. This is plenty for a piece of furniture.
+ */
+const FACE_LIMIT = 50_000
 /** The app sends a photo shrunk to 1024 px as a JPEG, well below this. */
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 
@@ -55,7 +60,8 @@ export async function falRequest(request: Request, key: string): Promise<Respons
   }
   if (typeof image !== 'string' || !image.startsWith('data:image/')) return json(400, { error: 'No photo was sent.' })
   // auto_size asks for real-world metres, so furniture arrives at about its true size.
-  return relay(fetch(`${QUEUE}/${MODEL}`, { method: 'POST', headers, body: JSON.stringify({ image_url: image, auto_size: true }) }))
+  const input = { image_url: image, auto_size: true, face_limit: FACE_LIMIT }
+  return relay(fetch(`${QUEUE}/${MODEL}`, { method: 'POST', headers, body: JSON.stringify(input) }))
 }
 
 /** Answers /fal on the hosted app, for people who know the shared password. */
