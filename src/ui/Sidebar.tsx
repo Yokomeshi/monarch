@@ -188,6 +188,8 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
   const identifying = useStore((s) => s.identifying)
   const identifyGaps = useStore((s) => s.identifyGaps)
   const keepThick = useStore((s) => s.keepThickSuggestedWalls)
+  const suggestionClick = useStore((s) => s.suggestionClick)
+  const setSuggestionClick = useStore((s) => s.setSuggestionClick)
   const thin = thinWalls(suggested ?? []).length
   const accessPassword = useStore((s) => s.accessPassword)
   const setAccessPassword = useStore((s) => s.setAccessPassword)
@@ -267,8 +269,24 @@ function DetectWallsPanel({ calibrated }: { calibrated: boolean }) {
               )}
             </>
           )}
+          <p className="hint">A click on the suggestion will:</p>
+          <div className="segmented" role="radiogroup" aria-label="A click on the suggestion">
+            {(['edit', 'door', 'window'] as const).map((mode) => (
+              <button
+                key={mode}
+                role="radio"
+                aria-checked={suggestionClick === mode}
+                className={suggestionClick === mode ? 'active' : ''}
+                onClick={() => setSuggestionClick(mode)}
+              >
+                {mode === 'edit' ? 'Remove' : mode === 'door' ? 'Door' : 'Window'}
+              </button>
+            ))}
+          </div>
           <p className="hint">
-            Click an orange wall to remove it from the suggestion{gaps.length > 0 && ', or a gap to change what it is: door, window or plain wall'}.
+            {suggestionClick === 'edit'
+              ? `Click an orange wall to remove it from the suggestion${gaps.length > 0 ? ', or a gap to change what it is: door, window or plain wall' : ''}.`
+              : `Click a wall to mark a ${suggestionClick} there, a gap to make it a ${suggestionClick}, or the space between two walls that line up to join them with a ${suggestionClick}.`}
             {thin > 0 && ' On a busy plan, keep the thick outer walls and trace the rest by hand.'}
           </p>
           {thin > 0 && (

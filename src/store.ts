@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { Units } from './units'
 import { metresPerPixel, type Px } from './plan/geometry'
-import { scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type WallProps } from './model/walls'
+import {
+  closestPointOnSegment, distance, scaleWalls, wallsFromChain, WALL_DEFAULTS, type Vec2, type Wall, type WallProps,
+} from './model/walls'
 
 import { parseProject, PROJECT_VERSION, usedTextureIds, type ProjectFile } from './project'
 import { ROOM_DEFAULTS, type Material, type RoomMaterials } from './model/materials'
@@ -16,7 +18,7 @@ import { createLight, scaleLights, type CeilingLight } from './model/lights'
 import { DEFAULT_RATES, type CostKey, type CostRates } from './model/cost'
 import { detectPlan } from './plan/detectWalls'
 import { cropPng, readRaster } from './plan/readRaster'
-import { cropSquare, gapMark, gapSuggestions, MIN_CONFIDENCE, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
+import { bridgeWalls, cropSquare, gapMark, gapSuggestions, markGap, MIN_CONFIDENCE, openingGaps, openingsFromGaps, type GapSuggestion } from './plan/suggestOpenings'
 import { askJev, JevError } from './ai/jevClient'
 import { gapQuestion, parseGapAnswer } from './ai/jevOpenings'
 import { detectOptions, thinWalls, toWalls } from './plan/suggestWalls'
@@ -51,8 +53,11 @@ export const UNDO_PAUSE = 400
 /** How many steps back undo can go. */
 export const UNDO_LIMIT = 100
 
+/** How far beside a suggested wall, in metres, a click still marks an opening on it. */
+const MARK_REACH = 0.25
+
 /** No walls or gaps on offer. */
-const NO_SUGGESTION = { suggestedWalls: null, suggestedGaps: [], identifying: 'idle' as const }
+const NO_SUGGESTION = { suggestedWalls: null, suggestedGaps: [], suggestionClick: 'edit' as const, identifying: 'idle' as const }
 
 // Before calibration the plan is shown 20 m wide so it fits the default view.
 const UNCALIBRATED_WIDTH_M = 20
@@ -82,6 +87,11 @@ interface State {
   suggestedWalls: Wall[] | null
   /** Gaps in the suggested walls: doors and windows, once identified. */
   suggestedGaps: GapSuggestion[]
+  /**
+   * What a click on the suggestion does. 'edit': a wall is removed, a gap changes kind.
+   * 'door' or 'window': that opening is marked where the click lands.
+   */
+  suggestionClick: 'edit' | 'door' | 'window'
   /** 'busy' while the gaps are being identified; a message if that failed. */
   identifying: 'idle' | 'busy' | { error: string; needsPassword: boolean }
   /** The hosted app's shared access password for the door and window service. Kept in this browser. */
@@ -149,6 +159,12 @@ interface State {
   discardSuggestedWalls: () => void
   /** Drop one wall, and its gaps, from the suggestion. */
   removeSuggestedWall: (id: string) => void
+  setSuggestionClick: (mode: State['suggestionClick']) => void
+  /**
+   * Mark a door or window by hand (as `suggestionClick` says) at a point of the suggestion: on a wall,
+   * on an existing gap, or in the space between two walls that line up, which are then joined.
+   */
+  markSuggestion: (at: Vec2, wallId?: string, gapIndex?: number) => void
   /** Drop the thin walls from the suggestion, leaving the heavy outer shell. */
   keepThickSuggestedWalls: () => void
   /** Set by hand what a suggested gap is: each call moves on through door, window, plain wall. */
@@ -436,6 +452,23 @@ export const useStore = create<State>()((set, get) => ({
         suggestedGaps: s.suggestedGaps.filter((_, i) => keep[i]),
       }
     }),
+
+  setSuggestionClick: (suggestionClick) => set({ suggestionClick }),
+
+  markSuggestion: (at, wallId, gapIndex) => {
+    const { suggestedWalls: walls, suggestedGaps: gaps, suggestionClick: kind } = get()
+    if (!walls || kind === 'edit') return
+    if (gapIndex !== undefined) {
+      set({ suggestedGaps: gaps.map((gap, i) => (i === gapIndex ? { ...gap, kind, confidence: 1 } : gap)) })
+      return
+    }
+    // A click that lands just beside a thin wall is meant for that wall, unless it is in a doorway between two.
+    const near = () =>
+      walls.find((w) => distance(at, closestPointOnSegment(at, w.start, w.end)) <= w.thickness / 2 + MARK_REACH)?.id
+    const onWall = wallId ?? (bridgeWalls(walls, gaps, at, kind) ? undefined : near())
+    const marked = onWall ? markGap(walls, gaps, onWall, at, kind) : bridgeWalls(walls, gaps, at, kind)
+    if (marked) set({ suggestedWalls: marked.walls, suggestedGaps: marked.gaps })
+  },
 
   keepThickSuggestedWalls: () => thinWalls(get().suggestedWalls ?? []).forEach((w) => get().removeSuggestedWall(w.id)),
 

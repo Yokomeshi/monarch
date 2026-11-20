@@ -23,7 +23,7 @@ export interface Opening {
 /** Openings stay this far from each end of the wall. */
 export const EDGE_CLEARANCE = 0.1
 
-const STANDARD: Record<OpeningType, Pick<Opening, 'width' | 'height' | 'sill'>> = {
+export const STANDARD: Record<OpeningType, Pick<Opening, 'width' | 'height' | 'sill'>> = {
   door: { width: 0.9, height: 2.1, sill: 0 },
   window: { width: 1.2, height: 1.2, sill: 0.9 },
 }

@@ -180,3 +180,29 @@ test('a suggested wall can be removed, and a gap set by hand, before adding', as
   await expect(app.getByTestId('wall-count')).toHaveText('5')
   await expect(app.getByTestId('opening-summary')).toHaveText('0 doors, 1 window')
 })
+
+test('doors and windows can be marked by hand on a suggestion', async ({ app }) => {
+  await detectOnOpeningsPlan(app)
+  const at = await topView(app, { width: 12, depth: 9 })
+  const world = (px: number, py: number) => [(px - 600) / 100, (py - 450) / 100] as const
+  const mode = (name: string) => app.getByRole('radiogroup', { name: 'A click on the suggestion' }).getByRole('radio', { name })
+  await expect(mode('Remove')).toBeChecked()
+
+  // A window marked on the unbroken top wall, where detection found nothing.
+  await mode('Window').click()
+  await click(app, at(...world(850, 108)))
+  await expect(app.getByTestId('detect-result')).toContainText('Found 6 walls, shown in orange, with 5 gaps bridged.')
+  await expect(app.getByTestId('identify-result')).toContainText('0 doors (green) and 1 window (blue) will be added.')
+
+  // The gap detection found in the bottom wall, set to a door with one click.
+  await mode('Door').click()
+  await click(app, at(...world(565, 792)))
+  await expect(app.getByTestId('identify-result')).toContainText('1 door (green) and 1 window (blue) will be added.')
+
+  // In these modes a click on a wall does not remove it.
+  await expect(app.getByTestId('detect-result')).toContainText('Found 6 walls')
+
+  await app.getByRole('button', { name: 'Add walls' }).click()
+  await expect(app.getByTestId('wall-count')).toHaveText('6')
+  await expect(app.getByTestId('opening-summary')).toHaveText('1 door, 1 window')
+})

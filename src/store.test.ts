@@ -24,6 +24,7 @@ beforeEach(() => {
     future: [],
     suggestedWalls: null,
     suggestedGaps: [],
+    suggestionClick: 'edit',
     identifying: 'idle',
     openings: [],
     objects: [],
@@ -495,6 +496,38 @@ describe('suggested walls', () => {
     })
     expect(kinds.map((g) => g.kind)).toEqual(['door', 'window', 'none', 'door'])
     expect(kinds.every((g) => g.confidence === 1)).toBe(true)
+  })
+
+  it('take doors and windows marked by hand: on a wall, beside a thin wall, on a gap, and across a doorway', () => {
+    // Two pieces of one wall with a 0.9 m doorway between them, and a wall well apart.
+    const left = createWall(p(0, 0), p(2, 0), { thickness: 0.1 })
+    const right = createWall(p(2.9, 0), p(6, 0), { thickness: 0.1 })
+    const other = createWall(p(0, 3), p(4, 3), { thickness: 0.1 })
+    const found = { wallId: other.id, position: 3, width: 0.8, kind: null, confidence: 0 }
+    useStore.setState({ suggestedWalls: [left, right, other], suggestedGaps: [found] })
+
+    store().markSuggestion(p(1, 3), other.id)
+    expect(store().suggestedGaps, 'nothing is marked in Remove mode').toHaveLength(1)
+
+    store().setSuggestionClick('window')
+    store().markSuggestion(p(1, 3), other.id) // on the wall
+    store().markSuggestion(p(4.5, 0.2)) // 15 cm beside the thin wall
+    store().markSuggestion(p(9, 9)) // nowhere near anything
+    store().setSuggestionClick('door')
+    store().markSuggestion(p(3, 3), undefined, 0) // the gap detection found
+    store().markSuggestion(p(2.4, 0.1)) // in the doorway
+
+    const { suggestedWalls, suggestedGaps } = store()
+    expect(suggestedWalls, 'the two pieces are now one wall').toHaveLength(2)
+    expect(suggestedGaps.map((g) => [g.kind, g.width])).toEqual([
+      ['door', 0.8],
+      ['window', 1.2],
+      ['window', 1.2],
+      ['door', expect.closeTo(0.9, 9)],
+    ])
+    store().acceptSuggestedWalls()
+    expect(store().openings.map((o) => o.type).sort()).toEqual(['door', 'door', 'window', 'window'])
+    expect(store().suggestionClick).toBe('edit')
   })
 
   it('forget the gaps when discarded', () => {
