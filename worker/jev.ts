@@ -14,7 +14,7 @@ const IMAGE_HEADER = 'TypeSafe-Danger-Zone-Images'
 /** A request carries one 512 px PNG crop as base64, far below this. Anything larger is not from the app. */
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 
-function json(status: number, body: unknown): Response {
+export function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
@@ -22,7 +22,7 @@ function json(status: number, body: unknown): Response {
  * Whether two strings are equal, taking the same time wherever they first differ,
  * so that response times do not let a caller guess the password one character at a time.
  */
-function sameText(a: string, b: string): boolean {
+export function sameText(a: string, b: string): boolean {
   const x = new TextEncoder().encode(a)
   const y = new TextEncoder().encode(b)
   let difference = x.length ^ y.length

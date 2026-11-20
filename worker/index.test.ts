@@ -10,6 +10,15 @@ afterEach(() => {
 })
 
 describe('the hosted worker', () => {
+  it('sends /fal to the fal route, which asks for the password', async () => {
+    const upstream = vi.fn()
+    vi.stubGlobal('fetch', upstream)
+    const response = await worker.fetch(new Request('https://monarch.example/fal?url=x'), { ...env, FAL_KEY: 'key' })
+    expect(response.status).toBe(401)
+    expect(upstream).not.toHaveBeenCalled()
+    expect(assets.fetch).not.toHaveBeenCalled()
+  })
+
   it('forwards a POST to /jev to Jev when the password is right', async () => {
     const upstream = vi.fn(async () => new Response('{"answers":{}}'))
     vi.stubGlobal('fetch', upstream)
