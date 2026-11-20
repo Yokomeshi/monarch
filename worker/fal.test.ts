@@ -31,7 +31,7 @@ describe('falRequest', () => {
     expect(init?.method).toBe('POST')
     expect((init?.headers as Record<string, string>).Authorization).toBe('Key secret-key')
     // Nothing the caller sent besides the photo is passed on.
-    expect(JSON.parse(init?.body as string)).toEqual({ image_url: photo, auto_size: true })
+    expect(JSON.parse(init?.body as string)).toEqual({ image_url: photo, auto_size: true, face_limit: 50_000 })
   })
 
   it.each([
