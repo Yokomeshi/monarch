@@ -46,3 +46,14 @@ To use the feature in a hosted copy of the app, host it on Cloudflare. `wrangler
 These must be the project's runtime **Variables and Secrets**, not the build variables on the setup screen or under the Build settings: the running app cannot read build variables. Until both secrets are set, the button reports that the server is not configured. Anyone with the password can spend your Jev credits, so share it only with people you trust. To revoke access, change `APP_PASSWORD` in Cloudflare's settings.
 
 The GitHub Pages preview keeps working as before, without this feature.
+
+## 3D models from photos (optional)
+
+In the **Furniture** panel, **3D model from a photo…** turns a photo of one object into a 3D model that you place like an imported file. The photo is sent to [fal](https://fal.ai), which runs the Tripo H3.1 image-to-3D model. Each model takes a minute or two and is charged to your fal account (about $0.30 at the time of writing; see the [model's page](https://fal.ai/models/tripo3d/h3.1/image-to-3d)).
+
+The key must stay out of the browser, so the app's own server makes the calls (`worker/fal.ts`). It always runs that one model, whatever the browser asks for.
+
+- **Locally:** add `FAL_KEY=your-key-here` to `.env.local` and restart `npm run dev`. Create a key at [fal API keys](https://fal.ai/dashboard/keys).
+- **Hosted on Cloudflare:** add a third **Secret**, `FAL_KEY`, next to the two above. The same `APP_PASSWORD` protects it, and anyone with the password can spend your fal credits.
+
+The GitHub Pages preview has no server, so the button reports an error there.

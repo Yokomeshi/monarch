@@ -15,6 +15,7 @@ import { wallLength } from '../model/walls'
 import { openingsFromGaps } from '../plan/suggestOpenings'
 import { thinWalls } from '../plan/suggestWalls'
 import { toIfc } from '../export/ifc'
+import { FalError, modelFromPhoto, photoDataUrl } from '../ai/falClient'
 import { WallPanel } from './WallPanel'
 
 export function Sidebar() {
@@ -590,6 +591,11 @@ function FurniturePanel() {
   const importModel = useStore((s) => s.importModel)
   const setTool = useStore((s) => s.setTool)
   const [error, setError] = useState<string | null>(null)
+  const accessPassword = useStore((s) => s.accessPassword)
+  const setAccessPassword = useStore((s) => s.setAccessPassword)
+  /** The photo being turned into a model, and how that is going. */
+  const [photo, setPhoto] = useState<File | null>(null)
+  const [making, setMaking] = useState<'idle' | 'busy' | { error: string; needsPassword: boolean }>('idle')
   const placing = tool === 'object'
   const placingName = (placingModelId && models[placingModelId]?.name) || LIBRARY[placingKind].name.toLowerCase()
 
@@ -607,6 +613,20 @@ function FurniturePanel() {
       await importModel(file)
     } catch (err) {
       setError(err instanceof Error ? err.message : `Couldn't read "${file.name}".`)
+    }
+  }
+
+  const makeFromPhoto = async (file: File) => {
+    setPhoto(file)
+    setMaking('busy')
+    try {
+      const glb = await modelFromPhoto(await photoDataUrl(file), accessPassword)
+      await importModel(new File([glb], `${file.name.replace(/\.[^.]*$/, '')}.glb`))
+      setPhoto(null)
+      setMaking('idle')
+    } catch (err) {
+      const needsPassword = err instanceof FalError && err.status === 401
+      setMaking({ error: err instanceof Error ? err.message : String(err), needsPassword })
     }
   }
 
@@ -647,6 +667,50 @@ function FurniturePanel() {
               />
             </label>
           </p>
+          <p>
+            <label className="button">
+              {making === 'busy' ? 'Making the model…' : '3D model from a photo…'}
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                disabled={making === 'busy'}
+                data-testid="photo-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) makeFromPhoto(file)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </p>
+          <p className="hint">
+            {making === 'busy'
+              ? 'This takes a minute or two. Keep this page open.'
+              : 'A photo of one piece on a plain background works best. The photo is sent to fal, and each model is charged to the fal account behind this app.'}
+          </p>
+          {typeof making === 'object' &&
+            (making.needsPassword ? (
+              <>
+                <p className="error" data-testid="photo-error">
+                  {accessPassword ? 'That password was not accepted.' : 'This needs the access password.'}
+                </p>
+                <label htmlFor="photo-password">Access password</label>
+                <input
+                  id="photo-password"
+                  type="password"
+                  value={accessPassword}
+                  onChange={(e) => setAccessPassword(e.target.value)}
+                />
+                <p>
+                  <button onClick={() => photo && makeFromPhoto(photo)}>Try again</button>
+                </p>
+              </>
+            ) : (
+              <p className="error" data-testid="photo-error">
+                Couldn't make the model: {making.error}. The README explains the setup this needs.
+              </p>
+            ))}
         </>
       )}
       {error && (
