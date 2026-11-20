@@ -83,8 +83,11 @@ describe('falRequest', () => {
   })
 
   it('answers 502 when fal cannot be reached', async () => {
-    upstream.mockRejectedValue(new Error('offline'))
-    expect((await falRequest(get(STATUS), 'k')).status).toBe(502)
+    upstream.mockRejectedValue(new Error('bad header "Key secret-key"'))
+    const response = await falRequest(get(STATUS), 'secret-key')
+    expect(response.status).toBe(502)
+    // The reason is passed on, without the key.
+    expect((await response.json()).error).toBe('Could not reach fal (bad header "Key [key]").')
   })
 })
 
