@@ -19,21 +19,30 @@ export function SuggestedWalls() {
   const editable = useStore((s) => s.tool === 'none')
   const removeSuggestedWall = useStore((s) => s.removeSuggestedWall)
   const cycleSuggestedGap = useStore((s) => s.cycleSuggestedGap)
+  const marking = useStore((s) => s.suggestionClick !== 'edit')
+  const markSuggestion = useStore((s) => s.markSuggestion)
   if (!suggested) return null
   const openings = openingsFromGaps(gaps, suggested)
-  const onClick = (action: () => void) =>
+  const onClick = (action: (at: Vec2) => void) =>
     editable
       ? (e: ThreeEvent<MouseEvent>) => {
           if (e.delta > MAX_CLICK_DRAG_PX) return
           e.stopPropagation()
-          action()
+          action({ x: e.point.x, z: e.point.z })
         }
       : undefined
 
   return (
     <group>
+      {marking && editable && (
+        // Under the walls: catches a click in the space between two walls, which joins them with an opening.
+        <mesh rotation-x={-Math.PI / 2} position-y={0.015} onClick={onClick((at) => markSuggestion(at))}>
+          <planeGeometry args={[2000, 2000]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
       {suggested.map((w) => (
-        <Strip key={w.id} from={w.start} to={w.end} width={w.thickness} y={0.02} color="#ffb020" opacity={0.85} onClick={onClick(() => removeSuggestedWall(w.id))} />
+        <Strip key={w.id} from={w.start} to={w.end} width={w.thickness} y={0.02} color="#ffb020" opacity={0.85} onClick={onClick((at) => (marking ? markSuggestion(at, w.id) : removeSuggestedWall(w.id)))} />
       ))}
       {gaps.map((gap, i) => {
         const wall = suggested.find((w) => w.id === gap.wallId)
@@ -54,7 +63,7 @@ export function SuggestedWalls() {
             y={0.03}
             color={GAP_COLOURS[opening?.type ?? 'none']}
             opacity={1}
-            onClick={onClick(() => cycleSuggestedGap(i))}
+            onClick={onClick((at) => (marking ? markSuggestion(at, undefined, i) : cycleSuggestedGap(i)))}
           />
         )
       })}

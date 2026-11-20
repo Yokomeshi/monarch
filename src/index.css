@@ -452,3 +452,7 @@ button:disabled {
   opacity: 0.5;
   cursor: default;
 }
+
+.segmented + .hint {
+  margin-top: 8px;
+}
