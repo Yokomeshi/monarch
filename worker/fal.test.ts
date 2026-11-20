@@ -99,6 +99,18 @@ describe('onRequest', () => {
     expect(upstream).not.toHaveBeenCalled()
   })
 
+  it.each(['abc…xyz', '••••••••', 'ab cd'])('answers 500 without calling fal when the key is %s, which is not a whole key', async (key) => {
+    const response = await onRequest({ request: get(STATUS, { 'X-App-Password': 'open-sesame' }), env: { ...env, FAL_KEY: key } })
+    expect(response.status).toBe(500)
+    expect((await response.json()).error).toMatch(/FAL_KEY/)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('ignores a line break pasted after the key', async () => {
+    await onRequest({ request: get(STATUS, { 'X-App-Password': 'open-sesame' }), env: { ...env, FAL_KEY: 'secret-key\n' } })
+    expect((upstream.mock.calls[0][1]?.headers as Record<string, string>).Authorization).toBe('Key secret-key')
+  })
+
   it('answers 401 without calling fal when the password is wrong or missing', async () => {
     expect((await onRequest({ request: get(STATUS, { 'X-App-Password': 'guess' }), env })).status).toBe(401)
     expect((await onRequest({ request: post(JSON.stringify({ image: photo })), env })).status).toBe(401)

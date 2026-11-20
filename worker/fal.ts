@@ -72,5 +72,11 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
   if (!sameText(request.headers.get('X-App-Password') ?? '', env.APP_PASSWORD)) {
     return json(401, { error: 'Wrong or missing password.' })
   }
-  return falRequest(request, env.FAL_KEY)
+  // A key copied from a list that shows it shortened ("abc…xyz") or masked has characters that cannot
+  // go in a header at all. The request would fail before it was sent, looking like fal being unreachable.
+  const key = env.FAL_KEY.trim()
+  if (!/^[\x21-\x7e]+$/.test(key)) {
+    return json(500, { error: "The server's FAL_KEY is not a whole key. Create a new key at fal and paste all of it." })
+  }
+  return falRequest(request, key)
 }
