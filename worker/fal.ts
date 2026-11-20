@@ -25,12 +25,14 @@ const FACE_LIMIT = 50_000
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 
 /** fal's reply with only its status and JSON; a refusal of the server's key is told apart from a wrong password. */
-async function relay(upstream: Promise<Response>): Promise<Response> {
+async function relay(upstream: Promise<Response>, key: string): Promise<Response> {
   let response: Response
   try {
     response = await upstream
-  } catch {
-    return json(502, { error: 'Could not reach fal.' })
+  } catch (err) {
+    // The runtime's own words say why, which "could not reach" alone does not. The key is kept out of them.
+    const why = err instanceof Error ? err.message.split(key).join('[key]') : ''
+    return json(502, { error: `Could not reach fal${why ? ` (${why})` : ''}.` })
   }
   if (response.status === 401) return json(502, { error: "fal did not accept the server's API key." })
   return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json' } })
@@ -44,7 +46,7 @@ export async function falRequest(request: Request, key: string): Promise<Respons
     // Only this model's jobs on fal's queue: the key must not be sent anywhere else.
     const url = new URL(request.url).searchParams.get('url') ?? ''
     if (!url.startsWith(`${QUEUE}/${MODEL.split('/')[0]}/`) || !url.includes('/requests/')) return json(400, { error: 'Not a fal request address.' })
-    return relay(fetch(url, { headers }))
+    return relay(fetch(url, { headers }), key)
   }
 
   if (request.method !== 'POST') return json(405, { error: 'Method not allowed.' })
@@ -61,7 +63,7 @@ export async function falRequest(request: Request, key: string): Promise<Respons
   if (typeof image !== 'string' || !image.startsWith('data:image/')) return json(400, { error: 'No photo was sent.' })
   // auto_size asks for real-world metres, so furniture arrives at about its true size.
   const input = { image_url: image, auto_size: true, face_limit: FACE_LIMIT }
-  return relay(fetch(`${QUEUE}/${MODEL}`, { method: 'POST', headers, body: JSON.stringify(input) }))
+  return relay(fetch(`${QUEUE}/${MODEL}`, { method: 'POST', headers, body: JSON.stringify(input) }), key)
 }
 
 /** Answers /fal on the hosted app, for people who know the shared password. */
@@ -72,5 +74,11 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
   if (!sameText(request.headers.get('X-App-Password') ?? '', env.APP_PASSWORD)) {
     return json(401, { error: 'Wrong or missing password.' })
   }
-  return falRequest(request, env.FAL_KEY)
+  // A key copied from a list that shows it shortened ("abc…xyz") or masked has characters that cannot
+  // go in a header at all. The request would fail before it was sent, looking like fal being unreachable.
+  const key = env.FAL_KEY.trim()
+  if (!/^[\x21-\x7e]+$/.test(key)) {
+    return json(500, { error: "The server's FAL_KEY is not a whole key. Create a new key at fal and paste all of it." })
+  }
+  return falRequest(request, key)
 }
