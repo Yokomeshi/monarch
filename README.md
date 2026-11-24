@@ -57,3 +57,10 @@ The key must stay out of the browser, so the app's own server makes the calls (`
 - **Hosted on Cloudflare:** add a third **Secret**, `FAL_KEY`, next to the two above. The same `APP_PASSWORD` protects it, and anyone with the password can spend your fal credits.
 
 The GitHub Pages preview has no server, so the button reports an error there.
+
+## Chat (work in progress)
+
+`/chat.html` is a chat-first version of Monarch. You describe a room and Claude writes the three.js code that draws it in the viewport beside the chat, looks at a screenshot of its own result, and fixes mistakes. The code runs in a sandboxed iframe that cannot reach the app or the password.
+
+- **Locally:** add `ANTHROPIC_API_KEY=your-key-here` to `.env.local` and restart `npm run dev`, then open `/chat.html`.
+- **Hosted on Cloudflare:** add a **Secret**, `ANTHROPIC_API_KEY`. The same `APP_PASSWORD` protects it, and anyone with the password can spend your Anthropic credits.
