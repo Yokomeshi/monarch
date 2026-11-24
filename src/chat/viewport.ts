@@ -14,8 +14,8 @@ export interface Measured {
 export interface Viewport {
   /** Draws the scene that `code` builds. Answers 'ok', or the error the code threw. */
   render(code: string): Promise<string>
-  /** The viewport as it looks now: a JPEG as a data: URL. */
-  screenshot(): Promise<string>
+  /** The viewport as it looks now: a JPEG as a data: URL, at most `side` px on its longest side (768 by default). */
+  screenshot(side?: number): Promise<string>
   /** Every named object in the scene, measured. */
   measure(): Promise<Measured[]>
   /** Keeps a GLB model under `name` for scene code to clone. Answers with its size in metres: [x, y, z]. */
@@ -69,8 +69,8 @@ export function createViewport(): { iframe: HTMLIFrameElement; viewport: Viewpor
         const answer = await ask({ type: 'render', code })
         return typeof answer.error === 'string' ? `Error: ${answer.error}` : 'ok'
       },
-      async screenshot() {
-        return String((await ask({ type: 'screenshot' })).dataUrl)
+      async screenshot(side) {
+        return String((await ask({ type: 'screenshot', side })).dataUrl)
       },
       async measure() {
         return (await ask({ type: 'measure' })).objects as Measured[]

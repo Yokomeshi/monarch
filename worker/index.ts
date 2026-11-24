@@ -3,6 +3,7 @@
 
 import { onRequest as onAgentRequest } from './agent'
 import { onRequest as onFalRequest } from './fal'
+import { onRequest as onRenderRequest } from './render'
 import { onRequestPost } from './jev'
 
 interface Env {
@@ -19,6 +20,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
     if (pathname === '/fal') return onFalRequest({ request, env })
+    if (pathname === '/render') return onRenderRequest({ request, env })
     if (pathname === '/agent') return onAgentRequest({ request, env })
     if (pathname !== '/jev') return env.ASSETS.fetch(request)
     if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } })

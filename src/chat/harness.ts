@@ -157,9 +157,9 @@ function render(code) {
   frame()
 }
 
-function screenshot() {
+function screenshot(side) {
   draw()
-  const scale = Math.min(1, 768 / Math.max(renderer.domElement.width, renderer.domElement.height))
+  const scale = Math.min(1, side / Math.max(renderer.domElement.width, renderer.domElement.height))
   const copy = document.createElement('canvas')
   copy.width = Math.round(renderer.domElement.width * scale)
   copy.height = Math.round(renderer.domElement.height * scale)
@@ -180,7 +180,7 @@ addEventListener('message', (e) => {
   } else if (type === 'measure') {
     parent.postMessage({ type: 'done', id, objects: measure() }, '*')
   } else if (type === 'screenshot') {
-    parent.postMessage({ type: 'shot', id, dataUrl: screenshot() }, '*')
+    parent.postMessage({ type: 'shot', id, dataUrl: screenshot(Number(e.data.side) || 768) }, '*')
   }
 })
 parent.postMessage({ type: 'ready' }, '*')

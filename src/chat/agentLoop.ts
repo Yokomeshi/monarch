@@ -3,6 +3,7 @@
 // browser, so the loop runs here: ask the model, run its tools, send back what they returned, repeat.
 
 import { modelFromPhoto } from '../ai/falClient'
+import { renderPhotoreal } from '../ai/renderClient'
 import { describeLength, formatFeetInches } from './units'
 import type { Measured, Viewport } from './viewport'
 
@@ -10,7 +11,7 @@ export type Block =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; tool_use_id: string; content: string | Block[]; is_error?: boolean }
-  | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg'; data: string } }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
 
 export interface Message {
   role: 'user' | 'assistant'
@@ -58,6 +59,11 @@ function describeScene(objects: Measured[]): string {
     .join('\n')
 }
 
+/** Starts the text of a photoreal render's result, so the chat can tell it from a plain screenshot. */
+export const RENDER_CAPTION = 'Photoreal render of the current scene.'
+/** Each render is billed, so a model that is never satisfied is stopped after this many for one message. */
+const MAX_RENDERS_PER_MESSAGE = 2
+
 /** What the tools need beyond their own input. It outlives one message, so photos and models made from them stay known. */
 export interface ToolContext {
   viewport: Viewport
@@ -66,9 +72,11 @@ export interface ToolContext {
   photos: string[]
   /** What each photo's model was reported as, so a photo is never sent (and billed) twice. */
   made: Map<number, string>
+  /** Photoreal renders made for the message being answered. */
+  renders: number
 }
 
-export const createToolContext = (viewport: Viewport, password = ''): ToolContext => ({ viewport, password, photos: [], made: new Map() })
+export const createToolContext = (viewport: Viewport, password = ''): ToolContext => ({ viewport, password, photos: [], made: new Map(), renders: 0 })
 
 /** Names the scene code uses to reach a model: models.<name>. */
 const MODEL_NAME = /^[a-z][a-z0-9_]{0,30}$/
@@ -88,6 +96,24 @@ async function modelFromPhotoTool(input: Record<string, unknown>, ctx: ToolConte
   return report
 }
 
+async function renderPhotorealTool(input: Record<string, unknown>, ctx: ToolContext): Promise<Block[] | string> {
+  const style = String(input.style ?? '').trim()
+  if (!style) throw new Error('style is required: say what the picture should look like.')
+  const number = input.photo === undefined ? undefined : Number(input.photo)
+  const photo = number === undefined ? undefined : ctx.photos[number - 1]
+  if (number !== undefined && !photo) return `There is no photo ${input.photo}. ${ctx.photos.length} photo(s) have been attached.`
+  if (ctx.renders >= MAX_RENDERS_PER_MESSAGE) return `Already made ${MAX_RENDERS_PER_MESSAGE} photoreal renders for this message. Each one costs money. Ask the user whether they want another.`
+  ctx.renders++
+  // A larger picture than the usual screenshot, since fal works from it.
+  const scene = await ctx.viewport.screenshot(1024)
+  const result = await renderPhotoreal(photo ? [scene, photo] : [scene], style, ctx.password)
+  const media = /^data:(image\/[a-z]+);/.exec(result)?.[1] ?? 'image/jpeg'
+  return [
+    { type: 'text', text: RENDER_CAPTION },
+    { type: 'image', source: { type: 'base64', media_type: media, data: result.split(',')[1] ?? '' } },
+  ]
+}
+
 async function runTool(name: string, input: Record<string, unknown>, ctx: ToolContext): Promise<Pick<Block & { type: 'tool_result' }, 'content' | 'is_error'>> {
   try {
     if (name === 'render_viewport') {
@@ -102,6 +128,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: ToolCo
       const lengths = Array.isArray(input.lengths) ? input.lengths : []
       return { content: lengths.map((l) => describeLength(String(l))).join('\n') || 'No lengths were given.' }
     }
+    if (name === 'render_photoreal') return { content: await renderPhotorealTool(input, ctx) }
     if (name === 'measure_scene') return { content: describeScene(await ctx.viewport.measure()) }
     if (name === 'model_from_photo') return { content: await modelFromPhotoTool(input, ctx) }
     return { content: `Unknown tool: ${name}`, is_error: true }
@@ -128,6 +155,7 @@ export async function sendMessage(
   ctx: ToolContext,
   onProgress: (messages: Message[]) => void = () => {},
 ): Promise<TurnResult> {
+  ctx.renders = 0
   let messages: Message[] = [...history, { role: 'user', content }]
   onProgress(messages)
   for (let step = 0; step < MAX_STEPS; step++) {

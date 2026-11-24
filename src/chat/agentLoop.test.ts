@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentError, createToolContext, sendMessage, withLatestScreenshotOnly, type Block, type Message } from './agentLoop'
+import { AgentError, createToolContext, RENDER_CAPTION, sendMessage, withLatestScreenshotOnly, type Block, type Message } from './agentLoop'
 import type { Viewport } from './viewport'
 
 const reply = (content: Block[], stop_reason: string) => new Response(JSON.stringify({ content, stop_reason }))
@@ -12,8 +12,10 @@ const viewport = (over: Partial<Viewport> = {}): Viewport => ({
   ...over,
 })
 
+vi.mock('../ai/renderClient', () => ({ renderPhotoreal: vi.fn(async () => 'data:image/jpeg;base64,RENDER') }))
 vi.mock('../ai/falClient', () => ({ modelFromPhoto: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])])) }))
 import { modelFromPhoto } from '../ai/falClient'
+import { renderPhotoreal } from '../ai/renderClient'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -126,6 +128,59 @@ describe('sendMessage', () => {
       content: 'sofa: 1.95 m (6 ft 4.8 in) wide, 0.41 m (1 ft 4.1 in) high, 0.5 m (1 ft 7.7 in) deep. Spans x -1 m to 0.95 m, z -0.25 m to 0.25 m, y 0 m to 0.41 m.',
     })
     expect((messages[4].content as Block[])[0]).toMatchObject({ content: expect.stringContaining('Set .name') })
+  })
+
+  describe('render_photoreal', () => {
+    const ask = (...inputs: Record<string, unknown>[]) => {
+      const calls = [...inputs.map((input, i) => reply([toolUse(`t${i}`, 'render_photoreal', input)], 'tool_use')), reply([], 'end_turn')]
+      vi.stubGlobal('fetch', vi.fn(async () => calls.shift()!))
+    }
+    const resultOf = (messages: Message[], i: number) => (messages[i].content as Block[])[0] as Block & { type: 'tool_result' }
+
+    it('sends a larger screenshot of the scene and the style to fal, and returns the picture with a caption', async () => {
+      vi.mocked(renderPhotoreal).mockClear()
+      ask({ style: 'oak floor, evening light' })
+      const v = viewport()
+      const { messages } = await sendMessage([], 'x', createToolContext(v, 'pw'))
+      expect(v.screenshot).toHaveBeenCalledWith(1024)
+      expect(renderPhotoreal).toHaveBeenCalledWith(['data:image/jpeg;base64,AAAA'], 'oak floor, evening light', 'pw')
+      expect(resultOf(messages, 2).content).toEqual([
+        { type: 'text', text: RENDER_CAPTION },
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'RENDER' } },
+      ])
+    })
+
+    it('adds an attached photo as the second image, and refuses one that was never attached', async () => {
+      vi.mocked(renderPhotoreal).mockClear()
+      ask({ style: 'x', photo: 1 }, { style: 'x', photo: 3 })
+      const ctx = createToolContext(viewport())
+      ctx.photos.push('data:image/jpeg;base64,PHOTO')
+      const { messages } = await sendMessage([], 'x', ctx)
+      expect(renderPhotoreal).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(renderPhotoreal).mock.calls[0][0]).toEqual(['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,PHOTO'])
+      expect(resultOf(messages, 4).content).toContain('There is no photo 3')
+    })
+
+    it('stops at two renders for one message, since each is billed, and allows more for the next message', async () => {
+      vi.mocked(renderPhotoreal).mockClear()
+      ask({ style: 'a' }, { style: 'b' }, { style: 'c' })
+      const ctx = createToolContext(viewport())
+      const { messages } = await sendMessage([], 'x', ctx)
+      expect(renderPhotoreal).toHaveBeenCalledTimes(2)
+      expect(resultOf(messages, 6).content).toContain('Already made 2')
+      ask({ style: 'd' })
+      await sendMessage(messages, 'again please', ctx)
+      expect(renderPhotoreal).toHaveBeenCalledTimes(3)
+    })
+
+    it('needs a style, and tells the model when fal fails', async () => {
+      vi.mocked(renderPhotoreal).mockClear()
+      vi.mocked(renderPhotoreal).mockRejectedValueOnce(new Error('fal request failed (402)'))
+      ask({ style: '' }, { style: 'x' })
+      const { messages } = await sendMessage([], 'x', createToolContext(viewport()))
+      expect(resultOf(messages, 2)).toMatchObject({ is_error: true, content: expect.stringContaining('style is required') })
+      expect(resultOf(messages, 4)).toMatchObject({ is_error: true, content: 'fal request failed (402)' })
+    })
   })
 
   it('stops a model that never stops calling tools', async () => {

@@ -37,6 +37,7 @@ Rules for the scene:
 - When you answer, give sizes in the units the user used.
 - The user may attach photos, numbered Photo 1, Photo 2 and so on. To turn the object in a photo into a 3D model, call model_from_photo once for it. It takes a minute or two and costs money, so never call it again for the same photo. Then clone the model in your scene code with models.<name>.clone(). Check its real size in the result and scale it to the dimensions the user gave, if they gave any.
 - Replace the whole scene each time. Each call to render_viewport starts from an empty scene.
+- Only when the user asks for a realistic picture, call render_photoreal after the scene is right and measured. It turns a screenshot of the viewport into a photograph with fal, costs $0.08, and shows the result to the user. Put the look in the style argument (materials, colours, light, time of day). Do not describe layout changes in it: the layout is kept exactly as drawn, so fix the layout in the scene first. If the user attached a photo of a space or a style to match, pass its number as the photo argument. Look at the result and tell the user if it drifted from the scene.
 - After you render, call measure_scene and compare each size with what the user asked for. Fix any that are off. Then call screenshot_viewport and look at the result. If something is wrong, fix it and render again. Stop once it looks right.
 - If render_viewport returns an error, fix the code and call it again.
 
@@ -81,6 +82,19 @@ const TOOLS = [
     description:
       'Measures every named object in the viewport: width, height and depth in metres and in feet and inches, and where it sits. Use it to check that sizes match what the user asked for.',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'render_photoreal',
+    description:
+      'Turns the current viewport into a photoreal picture with fal and shows it to the user. Costs $0.08 per call, so use it only when the user asks for a realistic image. The layout and sizes are kept as drawn.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        style: { type: 'string', description: 'How it should look: materials, colours, light, time of day. For example "oak floor, white walls, warm evening light".' },
+        photo: { type: 'integer', description: 'Optional: an attached photo to take materials and style from. 1 is the first one attached.' },
+      },
+      required: ['style'],
+    },
   },
   {
     name: 'screenshot_viewport',

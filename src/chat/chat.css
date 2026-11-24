@@ -18,3 +18,4 @@
 .chat-photos button { padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: pointer; }
 .chat-photos img { display: block; width: 48px; height: 48px; object-fit: cover; border-radius: 5px; }
 .chat-attach { display: flex; align-items: center; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); cursor: pointer; }
+.chat-render { width: 100%; border-radius: 10px; border: 1px solid var(--border); }

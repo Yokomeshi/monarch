@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { photoDataUrl } from '../ai/falClient'
-import { AgentError, createToolContext, sendMessage, type Block, type Message } from './agentLoop'
+import { AgentError, createToolContext, RENDER_CAPTION, sendMessage, type Block, type Message } from './agentLoop'
 import { createViewport } from './viewport'
 
 /** Same key as the main app, so one password entry covers both. */
@@ -20,14 +20,18 @@ const savePassword = (password: string) => {
   }
 }
 
-const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', measure_scene: 'Measuring', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
+const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', measure_scene: 'Measuring', render_photoreal: 'Making a photoreal picture (about 20 seconds)', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
 
 /** What the chat shows for a message: what was said, and a line for each tool the model used. */
-type Line = { kind: 'user' | 'assistant' | 'tool'; text: string }
+type Line = { kind: 'user' | 'assistant' | 'tool'; text: string } | { kind: 'image'; src: string }
 function lines(message: Message): Line[] {
   if (typeof message.content === 'string') return [{ kind: message.role, text: message.content }]
   return message.content.flatMap((b: Block): Line[] => {
     if (b.type === 'text' && b.text.trim()) return [{ kind: message.role, text: b.text }]
+    // A photoreal render is shown to the user. Plain screenshots are only for the model.
+    if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'text' && c.text === RENDER_CAPTION)) {
+      return b.content.flatMap((c): Line[] => (c.type === 'image' ? [{ kind: 'image', src: `data:${c.source.media_type};base64,${c.source.data}` }] : []))
+    }
     if (b.type === 'tool_use') return [{ kind: 'tool', text: TOOL_LABELS[b.name] ?? 'Working' }]
     return []
   })
@@ -98,9 +102,13 @@ export function Chat() {
       <section className="chat-pane">
         <div className="chat-log">
           {messages.length === 0 && <p className="chat-hint">Describe a room, a layout or a change. Try: a 4 x 5 m living room with a sofa along the long wall.</p>}
-          {messages.flatMap(lines).map((l, i) => (
-            <p key={i} className={`chat-line ${l.kind}`}>{l.text}</p>
-          ))}
+          {messages.flatMap(lines).map((l, i) =>
+            l.kind === 'image' ? (
+              <img key={i} className="chat-render" src={l.src} alt="Photoreal render of the scene" />
+            ) : (
+              <p key={i} className={`chat-line ${l.kind}`}>{l.text}</p>
+            ),
+          )}
           {busy && <p className="chat-line tool">Working…</p>}
           {error && <p className="chat-error" role="alert">{error}</p>}
         </div>

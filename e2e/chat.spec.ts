@@ -199,3 +199,44 @@ test('builds a room, fits items to exact sizes, and measures them back', async (
   expect(report).toContain('crate: 1 m (3 ft 3.4 in) wide, 1.5 m (4 ft 11.1 in) high, 2 m (6 ft 6.7 in) deep.')
   expect(errors, 'errors logged by the page').toEqual([])
 })
+
+test('shows the photoreal render in the chat, made from a screenshot of the scene', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  const sent: { messages: { content: unknown }[] }[] = []
+  const script = [
+    { content: [{ type: 'tool_use', id: 't1', name: 'render_viewport', input: { code: 'room(4, 5, 2.5)' } }], stop_reason: 'tool_use' },
+    { content: [{ type: 'tool_use', id: 't2', name: 'render_photoreal', input: { style: 'oak floor, warm evening light' } }], stop_reason: 'tool_use' },
+    { content: [{ type: 'text', text: 'Here is the photoreal view.' }], stop_reason: 'end_turn' },
+  ]
+  await page.route('**/agent', async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.fulfill({ json: script[sent.length - 1] })
+  })
+  let renderBody: { prompt: string; images: string[] } | undefined
+  await page.route('**/render', async (route) => {
+    renderBody = route.request().postDataJSON()
+    await route.fulfill({ json: { images: [{ url: 'https://fal.test/out.png' }] } })
+  })
+  // A 1 x 1 PNG stands in for the picture.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+  await page.route('https://fal.test/out.png', (route) => route.fulfill({ body: png, contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*' } }))
+
+  await page.goto('/chat.html')
+  await page.getByLabel('Message').fill('a 4 x 5 m room, make it photoreal')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Here is the photoreal view.')).toBeVisible()
+
+  // The user sees the picture. fal was sent one screenshot of the scene, and the style.
+  await expect(page.getByAltText('Photoreal render of the scene')).toBeVisible()
+  expect(renderBody!.prompt).toBe('oak floor, warm evening light')
+  expect(renderBody!.images).toHaveLength(1)
+  expect(renderBody!.images[0].startsWith('data:image/jpeg;base64,')).toBe(true)
+
+  // The model got the picture back, to judge for itself.
+  const result = (sent[2].messages.at(-1)!.content as { content: { type: string }[] }[])[0].content
+  expect(result.map((b) => b.type)).toEqual(['text', 'image'])
+  expect(errors, 'errors logged by the page').toEqual([])
+})

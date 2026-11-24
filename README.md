@@ -64,3 +64,8 @@ The GitHub Pages preview has no server, so the button reports an error there.
 
 - **Locally:** add `ANTHROPIC_API_KEY=your-key-here` to `.env.local` and restart `npm run dev`, then open `/chat.html`.
 - **Hosted on Cloudflare:** add a **Secret**, `ANTHROPIC_API_KEY`. The same `APP_PASSWORD` protects it, and anyone with the password can spend your Anthropic credits.
+
+Two things in the chat cost money on your fal account, using the same `FAL_KEY` and password as the photo-to-3D feature above:
+
+- **3D model from a photo:** about $0.30 each.
+- **Photoreal render** (`render_photoreal`): about $0.08 each with Nano Banana 2 (`worker/render.ts`). The chat stops at two renders per message.

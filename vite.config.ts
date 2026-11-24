@@ -3,6 +3,7 @@ import { defineConfig, loadEnv, type Connect, type Plugin, type ProxyOptions } f
 import react from '@vitejs/plugin-react'
 import { agentRequest } from './worker/agent.ts'
 import { falRequest } from './worker/fal.ts'
+import { renderRequest } from './worker/render.ts'
 
 /**
  * Runs one of the hosted app's routes (/fal or /agent, from worker/) on the dev and preview servers,
@@ -52,6 +53,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       keyedRoute('/fal', env.FAL_KEY ?? '', falRequest, 'The server is not configured for fal.'),
+      keyedRoute('/render', env.FAL_KEY ?? '', renderRequest, 'The server is not configured for fal.'),
       keyedRoute('/agent', env.ANTHROPIC_API_KEY ?? '', agentRequest, 'The server is not configured for Claude.'),
     ],
     // Two pages: the original editor, and the chat.
