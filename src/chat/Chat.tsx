@@ -19,13 +19,15 @@ const savePassword = (password: string) => {
   }
 }
 
+const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes' }
+
 /** What the chat shows for a message: what was said, and a line for each tool the model used. */
 type Line = { kind: 'user' | 'assistant' | 'tool'; text: string }
 function lines(message: Message): Line[] {
   if (typeof message.content === 'string') return [{ kind: message.role, text: message.content }]
   return message.content.flatMap((b: Block): Line[] => {
     if (b.type === 'text' && b.text.trim()) return [{ kind: message.role, text: b.text }]
-    if (b.type === 'tool_use') return [{ kind: 'tool', text: b.name === 'render_viewport' ? 'Drawing the viewport' : 'Checking the result' }]
+    if (b.type === 'tool_use') return [{ kind: 'tool', text: TOOL_LABELS[b.name] ?? 'Working' }]
     return []
   })
 }

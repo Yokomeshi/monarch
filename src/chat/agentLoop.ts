@@ -2,6 +2,7 @@
 // (worker/agent.ts), which holds the key. The tools it asks for act on the viewport, which is in this
 // browser, so the loop runs here: ask the model, run its tools, send back what they returned, repeat.
 
+import { describeLength } from './units'
 import type { Viewport } from './viewport'
 
 export type Block =
@@ -55,6 +56,10 @@ async function runTool(name: string, input: Record<string, unknown>, viewport: V
     if (name === 'screenshot_viewport') {
       const dataUrl = await viewport.screenshot()
       return { content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl.split(',')[1] ?? '' } }] }
+    }
+    if (name === 'convert_length') {
+      const lengths = Array.isArray(input.lengths) ? input.lengths : []
+      return { content: lengths.map((l) => describeLength(String(l))).join('\n') || 'No lengths were given.' }
     }
     return { content: `Unknown tool: ${name}`, is_error: true }
   } catch (err) {

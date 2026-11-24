@@ -26,6 +26,8 @@ You draw the viewport yourself. Call render_viewport with JavaScript that builds
 
 Rules for the scene:
 - One unit is one metre. Real sizes matter: a door is about 2.0 m high, a sofa about 0.9 m deep.
+- People give sizes in cm, inches, or feet and inches, and write them as L x D x H (length, depth, height). P means depth too. Call convert_length for every size that is not already in metres, and build with the metres it returns. Never do the conversion yourself.
+- When you answer, give sizes in the units the user used.
 - Replace the whole scene each time. Each call to render_viewport starts from an empty scene.
 - After you render, call screenshot_viewport and look at the result. If something is wrong, fix it and render again. Stop once it looks right.
 - If render_viewport returns an error, fix the code and call it again.
@@ -41,6 +43,16 @@ const TOOLS = [
       type: 'object',
       properties: { code: { type: 'string', description: 'JavaScript, the body of function (THREE, scene, camera, renderer).' } },
       required: ['code'],
+    },
+  },
+  {
+    name: 'convert_length',
+    description:
+      'Exact conversion of lengths to metres and feet and inches. Each length is text such as "195 cm", "110.2 inch" or "9 ft 2.2 in". Returns one line per length.',
+    input_schema: {
+      type: 'object',
+      properties: { lengths: { type: 'array', items: { type: 'string' }, description: 'One length per item, with its unit.' } },
+      required: ['lengths'],
     },
   },
   {

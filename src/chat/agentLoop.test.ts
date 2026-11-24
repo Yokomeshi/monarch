@@ -49,6 +49,16 @@ describe('sendMessage', () => {
     ])
   })
 
+  it('converts lengths exactly for the model, and says which it could not read', async () => {
+    const calls = [reply([toolUse('a', 'convert_length', { lengths: ['195 cm', 'big'] })], 'tool_use'), reply([], 'end_turn')]
+    vi.stubGlobal('fetch', vi.fn(async () => calls.shift()!))
+    const { messages } = await sendMessage([], 'x', viewport(), '')
+    expect((messages[2].content as Block[])[0]).toMatchObject({
+      tool_use_id: 'a',
+      content: '195 cm = 1.95 m = 6 ft 4.8 in\nbig = could not read this as a length',
+    })
+  })
+
   it('stops a model that never stops calling tools', async () => {
     const upstream = vi.fn(async () => reply([toolUse('a', 'render_viewport', { code: '' })], 'tool_use'))
     vi.stubGlobal('fetch', upstream)
