@@ -8,9 +8,13 @@ export interface Viewport {
   render(code: string): Promise<string>
   /** The viewport as it looks now: a JPEG as a data: URL. */
   screenshot(): Promise<string>
+  /** Keeps a GLB model under `name` for scene code to clone. Answers with its size in metres: [x, y, z]. */
+  addModel(name: string, glb: ArrayBuffer): Promise<[number, number, number]>
 }
 
 const TIMEOUT_MS = 10_000
+/** Reading a model's file takes longer than drawing a scene. */
+const MODEL_TIMEOUT_MS = 30_000
 
 export function createViewport(): { iframe: HTMLIFrameElement; viewport: Viewport } {
   const iframe = document.createElement('iframe')
@@ -31,14 +35,14 @@ export function createViewport(): { iframe: HTMLIFrameElement; viewport: Viewpor
     else waiting.get(message.id)?.(message)
   })
 
-  async function ask(request: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async function ask(request: Record<string, unknown>, timeout = TIMEOUT_MS): Promise<Record<string, unknown>> {
     await loaded
     const id = next++
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         waiting.delete(id)
         reject(new Error('The viewport did not answer. Its code may be stuck in a loop.'))
-      }, TIMEOUT_MS)
+      }, timeout)
       waiting.set(id, (message) => {
         clearTimeout(timer)
         waiting.delete(id)
@@ -57,6 +61,11 @@ export function createViewport(): { iframe: HTMLIFrameElement; viewport: Viewpor
       },
       async screenshot() {
         return String((await ask({ type: 'screenshot' })).dataUrl)
+      },
+      async addModel(name, glb) {
+        const answer = await ask({ type: 'loadModel', name, glb }, MODEL_TIMEOUT_MS)
+        if (typeof answer.error === 'string') throw new Error(`The model could not be read: ${answer.error}`)
+        return answer.size as [number, number, number]
       },
     },
   }

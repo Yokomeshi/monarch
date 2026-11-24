@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AgentError, sendMessage, type Block, type Message } from './agentLoop'
+import { photoDataUrl } from '../ai/falClient'
+import { AgentError, createToolContext, sendMessage, type Block, type Message } from './agentLoop'
 import { createViewport } from './viewport'
 
 /** Same key as the main app, so one password entry covers both. */
@@ -19,7 +20,7 @@ const savePassword = (password: string) => {
   }
 }
 
-const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes' }
+const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
 
 /** What the chat shows for a message: what was said, and a line for each tool the model used. */
 type Line = { kind: 'user' | 'assistant' | 'tool'; text: string }
@@ -35,6 +36,8 @@ function lines(message: Message): Line[] {
 export function Chat() {
   const { iframe, viewport } = useMemo(createViewport, [])
   const stage = useRef<HTMLDivElement>(null)
+  const ctx = useMemo(() => createToolContext(viewport), [viewport])
+  const [attached, setAttached] = useState<string[]>([]) // photos waiting to go with the next message
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,13 +52,24 @@ export function Chat() {
   async function send() {
     const message = text.trim()
     if (!message || busy) return
+    // Each photo is numbered, so the model can refer to it when it calls model_from_photo.
+    const first = ctx.photos.length
+    const content: Block[] = [
+      ...attached.flatMap((url, i): Block[] => [
+        { type: 'text', text: `Photo ${first + i + 1}:` },
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: url.split(',')[1] ?? '' } },
+      ]),
+      { type: 'text', text: message },
+    ]
     setText('')
+    setAttached([])
     setError('')
     setBusy(true)
-    let password = readPassword()
+    ctx.password = readPassword()
+    ctx.photos.push(...attached)
     for (let attempt = 0; ; attempt++) {
       try {
-        const { messages: done, stoppedEarly } = await sendMessage(messages, message, viewport, password, setMessages)
+        const { messages: done, stoppedEarly } = await sendMessage(messages, attached.length ? content : message, ctx, setMessages)
         setMessages(done)
         if (stoppedEarly) setError('Stopped after too many steps. Send another message to continue.')
         break
@@ -63,12 +77,14 @@ export function Chat() {
         if (err instanceof AgentError && err.status === 401 && attempt === 0) {
           const entered = window.prompt('Enter the access password')
           if (entered) {
-            password = entered
+            ctx.password = entered
             savePassword(entered)
             continue
           }
         }
         setMessages(messages) // back to before this message
+        ctx.photos.length = first
+        setAttached(attached)
         setText(message)
         setError(err instanceof Error ? err.message : String(err))
         break
@@ -88,6 +104,15 @@ export function Chat() {
           {busy && <p className="chat-line tool">Working…</p>}
           {error && <p className="chat-error" role="alert">{error}</p>}
         </div>
+        {attached.length > 0 && (
+          <div className="chat-photos">
+            {attached.map((url, i) => (
+              <button type="button" key={i} title="Remove this photo" onClick={() => setAttached(attached.filter((_, j) => j !== i))}>
+                <img src={url} alt={`Attached photo ${i + 1}`} />
+              </button>
+            ))}
+          </div>
+        )}
         <form
           className="chat-form"
           onSubmit={(e) => {
@@ -108,6 +133,19 @@ export function Chat() {
             rows={2}
             aria-label="Message"
           />
+          <label className="chat-attach" title="Attach a photo">
+            Photo
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) setAttached([...attached, await photoDataUrl(file)])
+              }}
+            />
+          </label>
           <button type="submit" disabled={busy || !text.trim()}>Send</button>
         </form>
       </section>
