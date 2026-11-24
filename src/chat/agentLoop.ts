@@ -3,8 +3,8 @@
 // browser, so the loop runs here: ask the model, run its tools, send back what they returned, repeat.
 
 import { modelFromPhoto } from '../ai/falClient'
-import { describeLength } from './units'
-import type { Viewport } from './viewport'
+import { describeLength, formatFeetInches } from './units'
+import type { Measured, Viewport } from './viewport'
 
 export type Block =
   | { type: 'text'; text: string }
@@ -47,6 +47,16 @@ export function withLatestScreenshotOnly(messages: Message[]): Message[] {
 }
 
 const hasImage = (block: Block) => block.type === 'tool_result' && Array.isArray(block.content) && block.content.some((b) => b.type === 'image')
+
+/** The measured objects as text for the model: each size in metres and in feet and inches. */
+function describeScene(objects: Measured[]): string {
+  if (objects.length === 0) return 'Nothing in the scene has a name. Set .name on each object you want measured, then render again.'
+  const m = (n: number) => `${Number(n.toFixed(2))} m`
+  const both = (n: number) => `${m(n)} (${formatFeetInches(n)})`
+  return objects
+    .map((o) => `${o.name}: ${both(o.size[0])} wide, ${both(o.size[1])} high, ${both(o.size[2])} deep. Spans x ${m(o.min[0])} to ${m(o.max[0])}, z ${m(o.min[2])} to ${m(o.max[2])}, y ${m(o.min[1])} to ${m(o.max[1])}.`)
+    .join('\n')
+}
 
 /** What the tools need beyond their own input. It outlives one message, so photos and models made from them stay known. */
 export interface ToolContext {
@@ -92,6 +102,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: ToolCo
       const lengths = Array.isArray(input.lengths) ? input.lengths : []
       return { content: lengths.map((l) => describeLength(String(l))).join('\n') || 'No lengths were given.' }
     }
+    if (name === 'measure_scene') return { content: describeScene(await ctx.viewport.measure()) }
     if (name === 'model_from_photo') return { content: await modelFromPhotoTool(input, ctx) }
     return { content: `Unknown tool: ${name}`, is_error: true }
   } catch (err) {

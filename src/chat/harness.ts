@@ -2,8 +2,8 @@
 // sandboxed without allow-same-origin: it cannot reach the app, its storage or the password. It talks
 // to the app only through postMessage.
 //
-// App -> page: { type: 'render', id, code } | { type: 'screenshot', id } | { type: 'loadModel', id, name, glb }
-// Page -> app: { type: 'ready' } | { type: 'done', id, error?, size? } | { type: 'shot', id, dataUrl }
+// App -> page: { type: 'render', id, code } | { type: 'screenshot', id } | { type: 'loadModel', id, name, glb } | { type: 'measure', id }
+// Page -> app: { type: 'ready' } | { type: 'done', id, error?, size?, objects? } | { type: 'shot', id, dataUrl }
 
 // three's package exports hide these files, so they are read by path. The ES module is used
 // because three.cjs is only a deprecated stub that requires it.
@@ -95,11 +95,66 @@ function loadModel(name, glb) {
   })
 }
 
+// Helpers for the agent's code. Axes: x is width, y is up, z is depth, and the floor is y = 0.
+
+/** A room centred on the origin: a floor and four walls that face inward, so from outside the walls cannot be seen (a dollhouse view). */
+function room(width, depth, height) {
+  const group = new THREE.Group()
+  group.name = 'room'
+  const wall = new THREE.MeshStandardMaterial({ color: 0xf2efe9 })
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), new THREE.MeshStandardMaterial({ color: 0xd9c8a9 }))
+  floor.rotation.x = -Math.PI / 2
+  group.add(floor)
+  for (const [w, x, z, turn] of [[width, 0, -depth / 2, 0], [width, 0, depth / 2, Math.PI], [depth, -width / 2, 0, Math.PI / 2], [depth, width / 2, 0, -Math.PI / 2]]) {
+    const side = new THREE.Mesh(new THREE.PlaneGeometry(w, height), wall)
+    side.position.set(x, height / 2, z)
+    side.rotation.y = turn
+    group.add(side)
+  }
+  scene.add(group)
+  return group
+}
+
+/**
+ * Scales an object to exact sizes in metres: { x: width, y: height, z: depth }. A size left out follows the
+ * average scale of the ones given, so the object is not squashed. Returns the size it now has.
+ */
+function fit(object, sizes) {
+  const size = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3())
+  const wanted = { x: sizes.x, y: sizes.y, z: sizes.z }
+  const factors = ['x', 'y', 'z'].filter((a) => wanted[a] > 0).map((a) => wanted[a] / size[a])
+  if (factors.length === 0) return size
+  const mean = factors.reduce((a, b) => a + b, 0) / factors.length
+  const k = (a) => (wanted[a] > 0 ? wanted[a] / size[a] : mean)
+  object.scale.multiply(new THREE.Vector3(k('x'), k('y'), k('z')))
+  return new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3())
+}
+
+/** Every named object in the scene, with its size and where it is, in metres. */
+function measure() {
+  return scene.children.filter((o) => !base.includes(o) && o.name).map((o) => {
+    const box = new THREE.Box3().setFromObject(o)
+    const size = box.getSize(new THREE.Vector3())
+    return { name: o.name, size: [size.x, size.y, size.z], min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] }
+  })
+}
+
+/** Points the camera at what the scene holds, from far enough to see all of it. */
+function frame() {
+  const box = new THREE.Box3()
+  for (const o of scene.children) if (!base.includes(o)) box.expandByObject(o)
+  if (box.isEmpty()) return
+  box.getCenter(target)
+  const radius = box.getSize(new THREE.Vector3()).length() / 2
+  if (radius > 0) distance = Math.max(2, Math.min(80, (radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.1))
+}
+
 function render(code) {
   clear()
   for (const o of base) if (!scene.children.includes(o)) scene.add(o)
   target.set(0, 1, 0); yaw = 0.7; pitch = 0.5; distance = 9
-  new Function('THREE', 'scene', 'camera', 'renderer', 'models', code)(THREE, scene, camera, renderer, models)
+  new Function('THREE', 'scene', 'camera', 'renderer', 'models', 'room', 'fit', code)(THREE, scene, camera, renderer, models, room, fit)
+  frame()
 }
 
 function screenshot() {
@@ -122,6 +177,8 @@ addEventListener('message', (e) => {
       (size) => parent.postMessage({ type: 'done', id, size }, '*'),
       (err) => parent.postMessage({ type: 'done', id, error: String((err && err.message) || err).slice(0, 500) }, '*'),
     )
+  } else if (type === 'measure') {
+    parent.postMessage({ type: 'done', id, objects: measure() }, '*')
   } else if (type === 'screenshot') {
     parent.postMessage({ type: 'shot', id, dataUrl: screenshot() }, '*')
   }

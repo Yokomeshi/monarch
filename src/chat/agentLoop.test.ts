@@ -7,6 +7,7 @@ const toolUse = (id: string, name: string, input = {}): Block => ({ type: 'tool_
 const viewport = (over: Partial<Viewport> = {}): Viewport => ({
   render: vi.fn(async () => 'ok'),
   screenshot: vi.fn(async () => 'data:image/jpeg;base64,AAAA'),
+  measure: vi.fn(async () => []),
   addModel: vi.fn(async () => [0.6, 0.85, 0.5] as [number, number, number]),
   ...over,
 })
@@ -113,6 +114,18 @@ describe('sendMessage', () => {
       expect(resultOf(messages, 2)).toMatchObject({ is_error: true, content: 'fal request failed (402)' })
       expect(ctx.made.size).toBe(0)
     })
+  })
+
+  it('reports measured sizes in metres and in feet and inches, and says when nothing is named', async () => {
+    const measured = { name: 'sofa', size: [1.95, 0.41, 0.5] as [number, number, number], min: [-1, 0, -0.25] as [number, number, number], max: [0.95, 0.41, 0.25] as [number, number, number] }
+    const calls = [reply([toolUse('a', 'measure_scene')], 'tool_use'), reply([toolUse('b', 'measure_scene')], 'tool_use'), reply([], 'end_turn')]
+    vi.stubGlobal('fetch', vi.fn(async () => calls.shift()!))
+    const v = viewport({ measure: vi.fn().mockResolvedValueOnce([measured]).mockResolvedValueOnce([]) })
+    const { messages } = await sendMessage([], 'x', createToolContext(v))
+    expect((messages[2].content as Block[])[0]).toMatchObject({
+      content: 'sofa: 1.95 m (6 ft 4.8 in) wide, 0.41 m (1 ft 4.1 in) high, 0.5 m (1 ft 7.7 in) deep. Spans x -1 m to 0.95 m, z -0.25 m to 0.25 m, y 0 m to 0.41 m.',
+    })
+    expect((messages[4].content as Block[])[0]).toMatchObject({ content: expect.stringContaining('Set .name') })
   })
 
   it('stops a model that never stops calling tools', async () => {

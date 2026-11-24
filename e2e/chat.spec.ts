@@ -155,3 +155,47 @@ test('turns an attached photo into a 3D model the scene can use', async ({ page 
   expect((sent[2].messages.at(-1)!.content as { content: string }[])[0].content).toBe('ok')
   expect(errors, 'errors logged by the page').toEqual([])
 })
+
+test('builds a room, fits items to exact sizes, and measures them back', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  const code = `
+    room(4, 5, 2.5)
+    const sofaShape = new THREE.BoxGeometry(1, 1, 1)
+    sofaShape.translate(0, 0.5, 0) // lowest point at the origin
+    const sofa = new THREE.Mesh(sofaShape, new THREE.MeshStandardMaterial({ color: 0x6b7f99 }))
+    sofa.name = 'sofa'
+    fit(sofa, { x: 1.95, y: 0.41, z: 0.5 })
+    sofa.position.set(0, 0, -2.2)
+    scene.add(sofa)
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 4), new THREE.MeshStandardMaterial({ color: 0xaa7744 }))
+    crate.name = 'crate'
+    fit(crate, { x: 1 }) // only the width is given: the rest follows, so it is not squashed
+    crate.position.set(1, 0.75, 0.5)
+    scene.add(crate)`
+  const sent: { messages: { content: unknown }[] }[] = []
+  const script = [
+    { content: [{ type: 'tool_use', id: 't1', name: 'render_viewport', input: { code } }], stop_reason: 'tool_use' },
+    { content: [{ type: 'tool_use', id: 't2', name: 'measure_scene', input: {} }], stop_reason: 'tool_use' },
+    { content: [{ type: 'text', text: 'Checked.' }], stop_reason: 'end_turn' },
+  ]
+  await page.route('**/agent', async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.fulfill({ json: script[sent.length - 1] })
+  })
+  await page.goto('/chat.html')
+  await page.getByLabel('Message').fill('a 4 x 5 m room with a 195 x 50 x 41 cm sofa')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Checked.')).toBeVisible()
+
+  const render = (sent[1].messages.at(-1)!.content as { content: string }[])[0].content
+  expect(render).toBe('ok')
+  const report = (sent[2].messages.at(-1)!.content as { content: string }[])[0].content
+  expect(report).toContain('room: 4 m (13 ft 1.5 in) wide, 2.5 m (8 ft 2.4 in) high, 5 m (16 ft 4.9 in) deep.')
+  expect(report).toContain('sofa: 1.95 m (6 ft 4.8 in) wide, 0.41 m (1 ft 4.1 in) high, 0.5 m (1 ft 7.7 in) deep.')
+  expect(report).toContain('y 0 m to 0.41 m') // standing on the floor
+  expect(report).toContain('crate: 1 m (3 ft 3.4 in) wide, 1.5 m (4 ft 11.1 in) high, 2 m (6 ft 6.7 in) deep.')
+  expect(errors, 'errors logged by the page').toEqual([])
+})

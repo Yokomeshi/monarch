@@ -20,7 +20,7 @@ const savePassword = (password: string) => {
   }
 }
 
-const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
+const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', measure_scene: 'Measuring', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
 
 /** What the chat shows for a message: what was said, and a line for each tool the model used. */
 type Line = { kind: 'user' | 'assistant' | 'tool'; text: string }
