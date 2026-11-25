@@ -25,7 +25,7 @@ const FACE_LIMIT = 50_000
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 
 /** fal's reply with only its status and JSON; a refusal of the server's key is told apart from a wrong password. */
-async function relay(upstream: Promise<Response>, key: string): Promise<Response> {
+export async function relay(upstream: Promise<Response>, key: string): Promise<Response> {
   let response: Response
   try {
     response = await upstream
