@@ -12,19 +12,29 @@ import threeCore from '../../node_modules/three/build/three.core.js?raw'
 import gltfLoader from '../../node_modules/three/examples/jsm/loaders/GLTFLoader.js?raw'
 import geometryUtils from '../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js?raw'
 import skeletonUtils from '../../node_modules/three/examples/jsm/utils/SkeletonUtils.js?raw'
+import { skyFor } from './atmosphere'
 
 /** The script that sets up the renderer, orbit controls and the message handling, as plain JavaScript. */
 const HARNESS = `
+// The sun, sky and weather maths, copied in as source text (see atmosphere.ts).
+const skyFor = ${skyFor.toString()}
+
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
 document.body.appendChild(renderer.domElement)
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0xe9eaec)
 const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500)
 
+const hemi = new THREE.HemisphereLight(0xffffff, 0x9a9a9a, 1.1)
 const sun = new THREE.DirectionalLight(0xffffff, 1.4)
-sun.position.set(5, 10, 6)
-const base = [new THREE.HemisphereLight(0xffffff, 0x9a9a9a, 1.1), sun, new THREE.GridHelper(40, 40, 0x8a8f98, 0xc4c7cc)]
+sun.shadow.mapSize.set(2048, 2048)
+sun.shadow.bias = -0.0005
+const grid = new THREE.GridHelper(40, 40, 0x8a8f98, 0xc4c7cc)
+grid.material.transparent = true
+const base = [hemi, sun, sun.target, grid]
 
 // Orbit around a target: drag to turn, wheel to zoom, shift-drag to slide.
 const target = new THREE.Vector3(0, 1, 0)
@@ -139,6 +149,54 @@ function measure() {
   })
 }
 
+// The light the scene starts with, until the code calls atmosphere().
+let sky = null
+function defaults() {
+  sky = null
+  scene.background = new THREE.Color(0xe9eaec)
+  scene.fog = null
+  hemi.intensity = 1.1
+  grid.material.opacity = 1
+  sun.color.set(0xffffff)
+  sun.intensity = 1.4
+  sun.position.set(5, 10, 6)
+  sun.target.position.set(0, 0, 0)
+  sun.castShadow = false
+}
+
+/** Sets the time of day and weather: the sun, the sky, fog and shadows. Options: { hour: 0 to 24, weather: 'clear' | 'overcast' | 'fog' }. */
+function atmosphere(options) {
+  const o = options || {}
+  const hour = Number(o.hour === undefined ? 12 : o.hour)
+  if (!Number.isFinite(hour)) throw new Error('atmosphere: hour must be a number from 0 to 24')
+  const weather = o.weather === undefined ? 'clear' : o.weather
+  if (!['clear', 'overcast', 'fog'].includes(weather)) throw new Error("atmosphere: weather must be 'clear', 'overcast' or 'fog'")
+  sky = skyFor(hour, weather)
+  scene.background = new THREE.Color(sky.background)
+  scene.fog = sky.fog ? new THREE.Fog(sky.background, 6, 30) : null
+  hemi.intensity = sky.skyLight
+  grid.material.opacity = Math.min(1, Math.max(0.2, sky.skyLight)) // dim with the light, so it does not glow at night
+  sun.color.set(sky.lightColor)
+  sun.intensity = sky.lightIntensity
+}
+
+/** Aims the light at the scene and lets what it holds cast and catch shadows. The room's own floor and walls only catch them. */
+function lightScene(center, radius) {
+  const d = sky.lightDirection
+  sun.position.set(center.x + d[0] * radius * 3, center.y + d[1] * radius * 3, center.z + d[2] * radius * 3)
+  sun.target.position.copy(center)
+  sun.castShadow = sky.shadows
+  const lens = sun.shadow.camera
+  lens.left = -radius * 1.5; lens.right = radius * 1.5; lens.top = radius * 1.5; lens.bottom = -radius * 1.5
+  lens.near = 0.5; lens.far = radius * 6 + 10
+  lens.updateProjectionMatrix()
+  scene.traverse((o) => {
+    if (!o.isMesh) return
+    o.castShadow = !(o.parent && o.parent.name === 'room')
+    o.receiveShadow = true
+  })
+}
+
 /** Points the camera at what the scene holds, from far enough to see all of it. */
 function frame() {
   const box = new THREE.Box3()
@@ -147,13 +205,15 @@ function frame() {
   box.getCenter(target)
   const radius = box.getSize(new THREE.Vector3()).length() / 2
   if (radius > 0) distance = Math.max(2, Math.min(80, (radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.1))
+  if (sky && radius > 0) lightScene(box.getCenter(new THREE.Vector3()), radius)
 }
 
 function render(code) {
   clear()
   for (const o of base) if (!scene.children.includes(o)) scene.add(o)
   target.set(0, 1, 0); yaw = 0.7; pitch = 0.5; distance = 9
-  new Function('THREE', 'scene', 'camera', 'renderer', 'models', 'room', 'fit', code)(THREE, scene, camera, renderer, models, room, fit)
+  defaults()
+  new Function('THREE', 'scene', 'camera', 'renderer', 'models', 'room', 'fit', 'atmosphere', code)(THREE, scene, camera, renderer, models, room, fit, atmosphere)
   frame()
 }
 

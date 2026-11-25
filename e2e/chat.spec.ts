@@ -240,3 +240,83 @@ test('shows the photoreal render in the chat, made from a screenshot of the scen
   expect(result.map((b) => b.type)).toEqual(['text', 'image'])
   expect(errors, 'errors logged by the page').toEqual([])
 })
+
+test('sets the time of day and weather, so noon is bright and night is dark', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  const scene = (atmosphere: string) => `
+    room(4, 5, 2.5)
+    const sofaShape = new THREE.BoxGeometry(1, 1, 1)
+    sofaShape.translate(0, 0.5, 0)
+    const sofa = new THREE.Mesh(sofaShape, new THREE.MeshStandardMaterial({ color: 0x6b7f99 }))
+    fit(sofa, { x: 1.95, y: 0.41, z: 0.5 })
+    sofa.position.set(0, 0, -1)
+    scene.add(sofa)
+    ${atmosphere}`
+  const tool = (id: string, name: string, input: object) => ({ content: [{ type: 'tool_use', id, name, input }], stop_reason: 'tool_use' })
+  const sent: { messages: { content: unknown }[] }[] = []
+  const script = [
+    tool('a', 'render_viewport', { code: scene('atmosphere({ hour: 12 })') }),
+    tool('b', 'screenshot_viewport', {}),
+    tool('c', 'render_viewport', { code: scene('atmosphere({ hour: 23 })') }),
+    tool('d', 'screenshot_viewport', {}),
+    tool('e', 'render_viewport', { code: scene("atmosphere({ hour: 9, weather: 'fog' })") }),
+    tool('f', 'screenshot_viewport', {}),
+    { content: [{ type: 'text', text: 'Done.' }], stop_reason: 'end_turn' },
+  ]
+  await page.route('**/agent', async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.fulfill({ json: script[sent.length - 1] })
+  })
+  await page.goto('/chat.html')
+  await page.getByLabel('Message').fill('noon, then night, then fog')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Done.')).toBeVisible({ timeout: 30_000 })
+
+  const last = (call: number) => (sent[call].messages.at(-1)!.content as { content: unknown }[])[0].content
+  const picture = (call: number) => (last(call) as { source: { data: string } }[])[0].source.data
+  // Average brightness (0 to 255) of what the viewport showed the model.
+  const brightness = (data: string) =>
+    page.evaluate(async (b64) => {
+      const img = new Image()
+      img.src = `data:image/jpeg;base64,${b64}`
+      await img.decode()
+      const c = document.createElement('canvas')
+      c.width = c.height = 32
+      const g = c.getContext('2d')!
+      g.drawImage(img, 0, 0, 32, 32)
+      const px = g.getImageData(0, 0, 32, 32).data
+      let sum = 0
+      for (let i = 0; i < px.length; i += 4) sum += (px[i] + px[i + 1] + px[i + 2]) / 3
+      return sum / (px.length / 4)
+    }, data)
+  const [noon, night, fog] = [await brightness(picture(2)), await brightness(picture(4)), await brightness(picture(6))]
+  expect(noon).toBeGreaterThan(night + 60)
+  expect(Math.abs(fog - noon)).toBeGreaterThan(3) // fog really changed the picture
+
+  expect(last(1)).toBe('ok') // the render that set the noon atmosphere
+  expect(errors, 'errors logged by the page').toEqual([])
+})
+
+test('explains bad atmosphere options to the model', async ({ page }) => {
+  const tool = (id: string, code: string) => ({ content: [{ type: 'tool_use', id, name: 'render_viewport', input: { code } }], stop_reason: 'tool_use' })
+  const sent: { messages: { content: unknown }[] }[] = []
+  const script = [
+    tool('a', "atmosphere({ hour: 'noon' })"),
+    tool('b', "atmosphere({ hour: 12, weather: 'snow' })"),
+    { content: [{ type: 'text', text: 'Done.' }], stop_reason: 'end_turn' },
+  ]
+  await page.route('**/agent', async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.fulfill({ json: script[sent.length - 1] })
+  })
+  await page.goto('/chat.html')
+  await page.getByLabel('Message').fill('x')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Done.')).toBeVisible()
+  const result = (call: number) => (sent[call].messages.at(-1)!.content as { content: string; is_error: boolean }[])[0]
+  expect(result(1)).toMatchObject({ is_error: true, content: expect.stringContaining('atmosphere: hour must be a number') })
+  expect(result(2)).toMatchObject({ is_error: true, content: expect.stringContaining("weather must be 'clear'") })
+})
