@@ -69,3 +69,9 @@ Two things in the chat cost money on your fal account, using the same `FAL_KEY` 
 
 - **3D model from a photo:** about $0.30 each.
 - **Photoreal render** (`render_photoreal`): about $0.08 each with Nano Banana 2 (`worker/render.ts`). The chat stops at two renders per message.
+
+### Floor plans in the chat
+
+Attach a floor plan image and say how big it is ("it is 10 m wide"). Claude calls `read_floor_plan`, which finds the walls and the gaps in them (doors, windows, plain openings) with the same detection as the editor's **Detect walls**, then builds them in 3D. You see the plan with each wall numbered in orange and each opening in blue, so you can check what was found.
+
+It works on clean plans with solid, dark, straight walls. It misses hollow (double-line), hatched and diagonal walls, and says so when it finds none. It needs one real length, the whole plan's outer width or depth, to give sizes. Claude decides from the picture whether each opening is a door or a window, so check those.

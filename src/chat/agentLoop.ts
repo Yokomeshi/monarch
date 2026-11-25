@@ -4,6 +4,7 @@
 
 import { modelFromPhoto } from '../ai/falClient'
 import { renderPhotoreal } from '../ai/renderClient'
+import { readFloorPlan } from './planImage'
 import { describeLength, formatFeetInches } from './units'
 import type { Measured, Viewport } from './viewport'
 
@@ -61,6 +62,8 @@ function describeScene(objects: Measured[]): string {
 
 /** Starts the text of a photoreal render's result, so the chat can tell it from a plain screenshot. */
 export const RENDER_CAPTION = 'Photoreal render of the current scene.'
+/** Starts the text of a floor plan reading's result, so the chat shows its picture to the user too. */
+export const PLAN_CAPTION = 'Floor plan as read: walls numbered in orange, openings in blue.'
 /** Each render is billed, so a model that is never satisfied is stopped after this many for one message. */
 const MAX_RENDERS_PER_MESSAGE = 2
 
@@ -70,13 +73,15 @@ export interface ToolContext {
   password: string
   /** Photos the user attached, as JPEG data: URLs. Photo 1 is the first. */
   photos: string[]
+  /** The same photos at a larger size, for reading floor plans (1600 px, where thin lines survive). Same order as `photos`. */
+  plans: string[]
   /** What each photo's model was reported as, so a photo is never sent (and billed) twice. */
   made: Map<number, string>
   /** Photoreal renders made for the message being answered. */
   renders: number
 }
 
-export const createToolContext = (viewport: Viewport, password = ''): ToolContext => ({ viewport, password, photos: [], made: new Map(), renders: 0 })
+export const createToolContext = (viewport: Viewport, password = ''): ToolContext => ({ viewport, password, photos: [], plans: [], made: new Map(), renders: 0 })
 
 /** Names the scene code uses to reach a model: models.<name>. */
 const MODEL_NAME = /^[a-z][a-z0-9_]{0,30}$/
@@ -114,6 +119,22 @@ async function renderPhotorealTool(input: Record<string, unknown>, ctx: ToolCont
   ]
 }
 
+async function floorPlanTool(input: Record<string, unknown>, ctx: ToolContext): Promise<Block[] | string> {
+  const number = Number(input.photo)
+  const url = ctx.plans[number - 1]
+  if (!url) return `There is no photo ${input.photo}. ${ctx.photos.length} photo(s) have been attached.`
+  const [width, depth] = [input.overall_width_m, input.overall_depth_m].map((v) => (v === undefined ? undefined : Number(v)))
+  if (width !== undefined && depth !== undefined) throw new Error('Give overall_width_m or overall_depth_m, not both.')
+  const metres = width ?? depth
+  if (metres !== undefined && !(metres > 0)) throw new Error('The overall length must be a positive number of metres.')
+  const { text, overlay } = await readFloorPlan(url, metres === undefined ? undefined : { axis: width !== undefined ? 'width' : 'depth', metres })
+  return [
+    { type: 'text', text: PLAN_CAPTION },
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: overlay.split(',')[1] ?? '' } },
+    { type: 'text', text },
+  ]
+}
+
 async function runTool(name: string, input: Record<string, unknown>, ctx: ToolContext): Promise<Pick<Block & { type: 'tool_result' }, 'content' | 'is_error'>> {
   try {
     if (name === 'render_viewport') {
@@ -128,6 +149,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: ToolCo
       const lengths = Array.isArray(input.lengths) ? input.lengths : []
       return { content: lengths.map((l) => describeLength(String(l))).join('\n') || 'No lengths were given.' }
     }
+    if (name === 'read_floor_plan') return { content: await floorPlanTool(input, ctx) }
     if (name === 'render_photoreal') return { content: await renderPhotorealTool(input, ctx) }
     if (name === 'measure_scene') return { content: describeScene(await ctx.viewport.measure()) }
     if (name === 'model_from_photo') return { content: await modelFromPhotoTool(input, ctx) }

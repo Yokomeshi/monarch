@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { photoDataUrl } from '../ai/falClient'
-import { AgentError, createToolContext, RENDER_CAPTION, sendMessage, type Block, type Message } from './agentLoop'
+import { AgentError, createToolContext, PLAN_CAPTION, RENDER_CAPTION, sendMessage, type Block, type Message } from './agentLoop'
 import { createViewport } from './viewport'
+
+/** Largest side of the copy kept for reading floor plans: the size the plan reader works at. */
+const PLAN_SIDE = 1600
 
 /** Same key as the main app, so one password entry covers both. */
 const PASSWORD_KEY = 'monarch.accessPassword'
@@ -20,17 +23,18 @@ const savePassword = (password: string) => {
   }
 }
 
-const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', measure_scene: 'Measuring', render_photoreal: 'Making a photoreal picture (about 20 seconds)', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
+const TOOL_LABELS: Record<string, string> = { render_viewport: 'Drawing the viewport', screenshot_viewport: 'Checking the result', convert_length: 'Converting sizes', measure_scene: 'Measuring', render_photoreal: 'Making a photoreal picture (about 20 seconds)', read_floor_plan: 'Reading the floor plan', model_from_photo: 'Making a 3D model from your photo (1 to 2 minutes)' }
 
 /** What the chat shows for a message: what was said, and a line for each tool the model used. */
-type Line = { kind: 'user' | 'assistant' | 'tool'; text: string } | { kind: 'image'; src: string }
+type Line = { kind: 'user' | 'assistant' | 'tool'; text: string } | { kind: 'image'; src: string; alt: string }
 function lines(message: Message): Line[] {
   if (typeof message.content === 'string') return [{ kind: message.role, text: message.content }]
   return message.content.flatMap((b: Block): Line[] => {
     if (b.type === 'text' && b.text.trim()) return [{ kind: message.role, text: b.text }]
-    // A photoreal render is shown to the user. Plain screenshots are only for the model.
-    if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'text' && c.text === RENDER_CAPTION)) {
-      return b.content.flatMap((c): Line[] => (c.type === 'image' ? [{ kind: 'image', src: `data:${c.source.media_type};base64,${c.source.data}` }] : []))
+    // A photoreal render or a floor plan reading is shown to the user. Plain screenshots are only for the model.
+    if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'text' && (c.text === RENDER_CAPTION || c.text === PLAN_CAPTION))) {
+      const alt = b.content.some((c) => c.type === 'text' && c.text === PLAN_CAPTION) ? 'Floor plan with the walls and openings found' : 'Photoreal render of the scene'
+      return b.content.flatMap((c): Line[] => (c.type === 'image' ? [{ kind: 'image', src: `data:${c.source.media_type};base64,${c.source.data}`, alt }] : []))
     }
     if (b.type === 'tool_use') return [{ kind: 'tool', text: TOOL_LABELS[b.name] ?? 'Working' }]
     return []
@@ -41,7 +45,8 @@ export function Chat() {
   const { iframe, viewport } = useMemo(createViewport, [])
   const stage = useRef<HTMLDivElement>(null)
   const ctx = useMemo(() => createToolContext(viewport), [viewport])
-  const [attached, setAttached] = useState<string[]>([]) // photos waiting to go with the next message
+  // Photos waiting to go with the next message: the usual size, and a larger one for reading floor plans.
+  const [attached, setAttached] = useState<{ photo: string; plan: string }[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -59,9 +64,9 @@ export function Chat() {
     // Each photo is numbered, so the model can refer to it when it calls model_from_photo.
     const first = ctx.photos.length
     const content: Block[] = [
-      ...attached.flatMap((url, i): Block[] => [
+      ...attached.flatMap(({ photo }, i): Block[] => [
         { type: 'text', text: `Photo ${first + i + 1}:` },
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: url.split(',')[1] ?? '' } },
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: photo.split(',')[1] ?? '' } },
       ]),
       { type: 'text', text: message },
     ]
@@ -70,7 +75,8 @@ export function Chat() {
     setError('')
     setBusy(true)
     ctx.password = readPassword()
-    ctx.photos.push(...attached)
+    ctx.photos.push(...attached.map((a) => a.photo))
+    ctx.plans.push(...attached.map((a) => a.plan))
     for (let attempt = 0; ; attempt++) {
       try {
         const { messages: done, stoppedEarly } = await sendMessage(messages, attached.length ? content : message, ctx, setMessages)
@@ -88,6 +94,7 @@ export function Chat() {
         }
         setMessages(messages) // back to before this message
         ctx.photos.length = first
+        ctx.plans.length = first
         setAttached(attached)
         setText(message)
         setError(err instanceof Error ? err.message : String(err))
@@ -104,7 +111,7 @@ export function Chat() {
           {messages.length === 0 && <p className="chat-hint">Describe a room, a layout or a change. Try: a 4 x 5 m living room with a sofa along the long wall.</p>}
           {messages.flatMap(lines).map((l, i) =>
             l.kind === 'image' ? (
-              <img key={i} className="chat-render" src={l.src} alt="Photoreal render of the scene" />
+              <img key={i} className="chat-render" src={l.src} alt={l.alt} />
             ) : (
               <p key={i} className={`chat-line ${l.kind}`}>{l.text}</p>
             ),
@@ -114,9 +121,9 @@ export function Chat() {
         </div>
         {attached.length > 0 && (
           <div className="chat-photos">
-            {attached.map((url, i) => (
+            {attached.map(({ photo }, i) => (
               <button type="button" key={i} title="Remove this photo" onClick={() => setAttached(attached.filter((_, j) => j !== i))}>
-                <img src={url} alt={`Attached photo ${i + 1}`} />
+                <img src={photo} alt={`Attached photo ${i + 1}`} />
               </button>
             ))}
           </div>
@@ -150,7 +157,7 @@ export function Chat() {
               onChange={async (e) => {
                 const file = e.target.files?.[0]
                 e.target.value = ''
-                if (file) setAttached([...attached, await photoDataUrl(file)])
+                if (file) setAttached([...attached, { photo: await photoDataUrl(file), plan: await photoDataUrl(file, PLAN_SIDE) }])
               }}
             />
           </label>

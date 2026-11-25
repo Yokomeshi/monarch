@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentError, createToolContext, RENDER_CAPTION, sendMessage, withLatestScreenshotOnly, type Block, type Message } from './agentLoop'
+import { AgentError, createToolContext, PLAN_CAPTION, RENDER_CAPTION, sendMessage, withLatestScreenshotOnly, type Block, type Message } from './agentLoop'
 import type { Viewport } from './viewport'
 
 const reply = (content: Block[], stop_reason: string) => new Response(JSON.stringify({ content, stop_reason }))
@@ -12,6 +12,8 @@ const viewport = (over: Partial<Viewport> = {}): Viewport => ({
   ...over,
 })
 
+vi.mock('./planImage', () => ({ readFloorPlan: vi.fn(async () => ({ text: 'Found 4 walls.', overlay: 'data:image/jpeg;base64,OVERLAY' })) }))
+import { readFloorPlan } from './planImage'
 vi.mock('../ai/renderClient', () => ({ renderPhotoreal: vi.fn(async () => 'data:image/jpeg;base64,RENDER') }))
 vi.mock('../ai/falClient', () => ({ modelFromPhoto: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])])) }))
 import { modelFromPhoto } from '../ai/falClient'
@@ -128,6 +130,56 @@ describe('sendMessage', () => {
       content: 'sofa: 1.95 m (6 ft 4.8 in) wide, 0.41 m (1 ft 4.1 in) high, 0.5 m (1 ft 7.7 in) deep. Spans x -1 m to 0.95 m, z -0.25 m to 0.25 m, y 0 m to 0.41 m.',
     })
     expect((messages[4].content as Block[])[0]).toMatchObject({ content: expect.stringContaining('Set .name') })
+  })
+
+  describe('read_floor_plan', () => {
+    const ask = (...inputs: Record<string, unknown>[]) => {
+      const calls = [...inputs.map((input, i) => reply([toolUse(`t${i}`, 'read_floor_plan', input)], 'tool_use')), reply([], 'end_turn')]
+      vi.stubGlobal('fetch', vi.fn(async () => calls.shift()!))
+    }
+    const resultOf = (messages: Message[], i: number) => (messages[i].content as Block[])[0] as Block & { type: 'tool_result' }
+    const withPlan = () => {
+      const ctx = createToolContext(viewport())
+      ctx.photos.push('data:image/jpeg;base64,SMALL')
+      ctx.plans.push('data:image/jpeg;base64,LARGE')
+      return ctx
+    }
+
+    it('reads the larger copy of the plan with the given width, and returns what was found with a picture', async () => {
+      vi.mocked(readFloorPlan).mockClear()
+      ask({ photo: 1, overall_width_m: 10 })
+      const { messages } = await sendMessage([], 'x', withPlan())
+      expect(readFloorPlan).toHaveBeenCalledWith('data:image/jpeg;base64,LARGE', { axis: 'width', metres: 10 })
+      expect(resultOf(messages, 2).content).toEqual([
+        { type: 'text', text: PLAN_CAPTION },
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'OVERLAY' } },
+        { type: 'text', text: 'Found 4 walls.' },
+      ])
+    })
+
+    it('takes the depth instead, or no length at all', async () => {
+      vi.mocked(readFloorPlan).mockClear()
+      ask({ photo: 1, overall_depth_m: 7 }, { photo: 1 })
+      await sendMessage([], 'x', withPlan())
+      expect(vi.mocked(readFloorPlan).mock.calls.map((c) => c[1])).toEqual([{ axis: 'depth', metres: 7 }, undefined])
+    })
+
+    it('refuses both lengths, a length that is not positive, and a photo that was never attached', async () => {
+      vi.mocked(readFloorPlan).mockClear()
+      ask({ photo: 1, overall_width_m: 10, overall_depth_m: 7 }, { photo: 1, overall_width_m: -2 }, { photo: 2, overall_width_m: 5 })
+      const { messages } = await sendMessage([], 'x', withPlan())
+      expect(resultOf(messages, 2)).toMatchObject({ is_error: true, content: expect.stringContaining('not both') })
+      expect(resultOf(messages, 4)).toMatchObject({ is_error: true, content: expect.stringContaining('positive') })
+      expect(resultOf(messages, 6).content).toContain('There is no photo 2')
+      expect(readFloorPlan).not.toHaveBeenCalled()
+    })
+
+    it('tells the model when the image cannot be read', async () => {
+      vi.mocked(readFloorPlan).mockRejectedValueOnce(new Error('The image could not be decoded'))
+      ask({ photo: 1 })
+      const { messages } = await sendMessage([], 'x', withPlan())
+      expect(resultOf(messages, 2)).toMatchObject({ is_error: true, content: 'The image could not be decoded' })
+    })
   })
 
   describe('render_photoreal', () => {

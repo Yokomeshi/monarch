@@ -126,6 +126,66 @@ function room(width, depth, height) {
 }
 
 /**
+ * Walls from a list, as read_floor_plan returns them: [{ start: [x, z], end: [x, z], thickness, openings: [{ position, width, kind }] }].
+ * Each wall runs along its centre line. An opening is a gap along it, from \`position - width / 2\` to \`position + width / 2\`;
+ * kind is 'door' (from the floor, 2.1 m high) or 'window' (from 0.9 m, 1.2 m high), and sill and height can override. A floor goes under all of it.
+ * Options: { height } in metres, 2.5 by default. A lower height, such as 1.2, cuts the walls so the inside shows from outside.
+ */
+function walls(list, options) {
+  const height = options && options.height > 0 ? options.height : 2.5
+  const group = new THREE.Group()
+  group.name = 'walls'
+  const material = new THREE.MeshStandardMaterial({ color: 0xf2efe9 })
+  const xs = [], zs = []
+  let widest = 0
+  for (const wall of list) {
+    const [x0, z0] = wall.start, [x1, z1] = wall.end
+    const length = Math.hypot(x1 - x0, z1 - z0)
+    const thickness = wall.thickness > 0 ? wall.thickness : 0.15
+    xs.push(x0, x1); zs.push(z0, z1)
+    widest = Math.max(widest, thickness)
+    if (length === 0) continue
+    const angle = Math.atan2(z1 - z0, x1 - x0)
+    const cuts = (wall.openings || []).map((o) => {
+      const window = o.kind === 'window'
+      const sill = Math.min(o.sill !== undefined ? o.sill : window ? 0.9 : 0, height)
+      const top = Math.min(sill + (o.height !== undefined ? o.height : window ? 1.2 : 2.1), height)
+      return { from: Math.max(0, o.position - o.width / 2), to: Math.min(length, o.position + o.width / 2), sill, top }
+    }).sort((a, b) => a.from - b.from)
+    // The pieces of wall around the openings: [from, to, bottom, top] along the wall and up.
+    const pieces = []
+    let at = 0
+    for (const c of cuts) {
+      if (c.from > at) pieces.push([at, c.from, 0, height])
+      if (c.sill > 0) pieces.push([c.from, c.to, 0, c.sill])
+      if (c.top < height) pieces.push([c.from, c.to, c.top, height])
+      at = Math.max(at, c.to)
+    }
+    if (at < length) pieces.push([at, length, 0, height])
+    for (let [a, b, bottom, top] of pieces) {
+      // The ends of a wall reach half a thickness past its centre line, so corners are filled.
+      if (a === 0) a = -thickness / 2
+      if (b === length) b = length + thickness / 2
+      if (b - a < 0.001 || top - bottom < 0.001) continue
+      const box = new THREE.Mesh(new THREE.BoxGeometry(b - a, top - bottom, thickness), material)
+      const middle = (a + b) / 2
+      box.position.set(x0 + Math.cos(angle) * middle, (bottom + top) / 2, z0 + Math.sin(angle) * middle)
+      box.rotation.y = -angle
+      group.add(box)
+    }
+  }
+  if (xs.length) {
+    const [left, right, front, back] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)]
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(right - left + widest, back - front + widest), new THREE.MeshStandardMaterial({ color: 0xd9c8a9 }))
+    floor.rotation.x = -Math.PI / 2
+    floor.position.set((left + right) / 2, 0, (front + back) / 2)
+    group.add(floor)
+  }
+  scene.add(group)
+  return group
+}
+
+/**
  * Scales an object to exact sizes in metres: { x: width, y: height, z: depth }. A size left out follows the
  * average scale of the ones given, so the object is not squashed. Returns the size it now has.
  */
@@ -192,7 +252,7 @@ function lightScene(center, radius) {
   lens.updateProjectionMatrix()
   scene.traverse((o) => {
     if (!o.isMesh) return
-    o.castShadow = !(o.parent && o.parent.name === 'room')
+    o.castShadow = !(o.parent && (o.parent.name === 'room' || o.parent.name === 'walls'))
     o.receiveShadow = true
   })
 }
@@ -213,7 +273,7 @@ function render(code) {
   for (const o of base) if (!scene.children.includes(o)) scene.add(o)
   target.set(0, 1, 0); yaw = 0.7; pitch = 0.5; distance = 9
   defaults()
-  new Function('THREE', 'scene', 'camera', 'renderer', 'models', 'room', 'fit', 'atmosphere', code)(THREE, scene, camera, renderer, models, room, fit, atmosphere)
+  new Function('THREE', 'scene', 'camera', 'renderer', 'models', 'room', 'fit', 'atmosphere', 'walls', code)(THREE, scene, camera, renderer, models, room, fit, atmosphere, walls)
   frame()
 }
 
