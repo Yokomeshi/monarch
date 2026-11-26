@@ -19,7 +19,7 @@ describe('agentRequest', () => {
     const sent = JSON.parse(init.body as string)
     expect(sent.model).toBe(MODEL)
     expect(sent.system).not.toContain('ignore')
-    expect(sent.tools.map((t: { name: string }) => t.name)).toEqual(['render_viewport', 'convert_length', 'model_from_photo', 'measure_scene', 'render_photoreal', 'screenshot_viewport'])
+    expect(sent.tools.map((t: { name: string }) => t.name)).toEqual(['render_viewport', 'convert_length', 'model_from_photo', 'read_floor_plan', 'measure_scene', 'render_photoreal', 'screenshot_viewport'])
     expect(sent.messages).toEqual(hello.messages)
   })
 

@@ -17,14 +17,14 @@ const POLL_MS = 3000
 /** A model usually takes a minute or two. After this long something is wrong. */
 const GIVE_UP_MS = 10 * 60 * 1000
 
-/** The photo as a JPEG data: URL, shrunk to at most 1024 px a side. */
-export async function photoDataUrl(file: Blob): Promise<string> {
+/** The photo as a JPEG data: URL, shrunk to at most `side` px a side (1024 by default). */
+export async function photoDataUrl(file: Blob, side = PHOTO_SIDE): Promise<string> {
   const url = URL.createObjectURL(file)
   try {
     const img = new Image()
     img.src = url
     await img.decode()
-    const scale = Math.min(1, PHOTO_SIDE / Math.max(img.naturalWidth, img.naturalHeight))
+    const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight))
     const canvas = document.createElement('canvas')
     canvas.width = Math.round(img.naturalWidth * scale)
     canvas.height = Math.round(img.naturalHeight * scale)

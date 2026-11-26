@@ -320,3 +320,56 @@ test('explains bad atmosphere options to the model', async ({ page }) => {
   expect(result(1)).toMatchObject({ is_error: true, content: expect.stringContaining('atmosphere: hour must be a number') })
   expect(result(2)).toMatchObject({ is_error: true, content: expect.stringContaining("weather must be 'clear'") })
 })
+
+// fixtures/plan-openings.png: 1200 x 900 px at 100 px per metre. Three rooms in a 10 m x 7 m shell; a door in
+// the bottom wall, a window in the right wall, and two plain openings in the partitions.
+test('reads a floor plan into walls in metres, which the scene then builds and measures', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  page.on('pageerror', (e) => errors.push(e.message))
+
+  type Wall = { id: number; start: [number, number]; end: [number, number]; thickness: number; openings: { id: string; position: number; width: number; kind?: string }[] }
+  const sent: { messages: { content: unknown }[] }[] = []
+  const resultText = (call: number) => {
+    const blocks = (sent[call].messages.at(-1)!.content as { content: string | { type: string; text?: string }[] }[])[0].content
+    return typeof blocks === 'string' ? blocks : blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+  }
+  const tool = (id: string, name: string, input: object) => ({ content: [{ type: 'tool_use', id, name, input }], stop_reason: 'tool_use' })
+  // The model's later steps depend on what the reader returned, as they would in real use.
+  const reply = (call: number) => {
+    if (call === 0) return tool('a', 'read_floor_plan', { photo: 1 })
+    if (call === 1) return tool('b', 'read_floor_plan', { photo: 1, overall_width_m: 10 })
+    if (call === 2) {
+      const list: Wall[] = JSON.parse(resultText(2).split('\n').at(-1)!)
+      // The windows and doors, as the model would decide from the picture: the opening on the right wall is the window.
+      for (const wall of list) for (const o of wall.openings) o.kind = wall.start[0] > 4 && wall.start[0] === wall.end[0] ? 'window' : 'door'
+      return tool('c', 'render_viewport', { code: `walls(${JSON.stringify(list)}, { height: 1.2 })` })
+    }
+    if (call === 3) return tool('d', 'measure_scene', {})
+    return { content: [{ type: 'text', text: 'Built from the plan.' }], stop_reason: 'end_turn' }
+  }
+  await page.route('**/agent', async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.fulfill({ json: reply(sent.length - 1) })
+  })
+
+  await page.goto('/chat.html')
+  await page.locator('input[type=file]').setInputFiles('e2e/fixtures/plan-openings.png')
+  await expect(page.getByAltText('Attached photo 1')).toBeVisible()
+  await page.getByLabel('Message').fill('build this plan, it is 10 m wide')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Built from the plan.')).toBeVisible({ timeout: 30_000 })
+
+  // Without a scale it asks for one, and gives no sizes.
+  expect(resultText(1)).toContain('no scale')
+  expect(resultText(1)).toContain('overall_width_m or overall_depth_m')
+  // With one: the six walls and four openings of the fixture, 10 x 7 m overall.
+  expect(resultText(2)).toContain('Found 6 walls and 4 openings')
+  expect(resultText(2)).toContain('10 m (32 ft 9.7 in) wide (x) by 7 m (22 ft 11.6 in) deep (z)')
+  // The picture of what was found is shown to the user in the chat.
+  await expect(page.getByAltText('Floor plan with the walls and openings found').first()).toBeVisible()
+  // The scene built from it has the plan's outer size, at the cut height.
+  expect((sent[3].messages.at(-1)!.content as { content: string }[])[0].content).toBe('ok')
+  expect(resultText(4)).toMatch(/walls: 10 m \(32 ft 9\.7 in\) wide, 1\.2 m \(3 ft 11\.2 in\) high, 7 m \(22 ft 11\.6 in\) deep/)
+  expect(errors, 'errors logged by the page').toEqual([])
+})
